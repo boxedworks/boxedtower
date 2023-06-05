@@ -24,30 +24,43 @@ public class EnemyScript : MonoBehaviour
     GROUND_ROLL_ARMOR_2,
     GROUND_ROLL_ARMOR_4,
     GROUND_ROLL_ARMOR_8,
+
+    GROUND_ROLL_STONE_2,
+
     GROUND_POP,
     GROUND_POP_FLOAT,
+
     GROUND_SLIDE,
     GROUND_SLIDE_SMALL,
     GROUND_SLIDE_MEDIUM,
     GROUND_SLIDE_TOP,
     GROUND_SLIDE_CASTLE,
+
     GROUND_TOTEM_5,
     FLYING_HOMING,
+
     CRATE,
+
     BOSS
   }
 
   // Use this for initialization
+  float _pitchSave, _forceModSave, _spawnTime;
   void Start()
   {
     Init();
+
+    if (_pitchSave == 0f)
+      _pitchSave = _EnemyNoise.pitch;
+    if (_forceModSave == 0f)
+      _forceModSave = _ForceModifier;
   }
 
   public void Init()
   {
     _rb = GetComponent<Rigidbody2D>();
 
-
+    _spawnTime = Time.time;
     _CanDropLoot = true;
 
     // Error
@@ -72,24 +85,35 @@ public class EnemyScript : MonoBehaviour
 
   void Update()
   {
-    if (_EnemyType == EnemyType.GROUND_SLIDE || _EnemyType == EnemyType.GROUND_SLIDE_MEDIUM || _EnemyType == EnemyType.GROUND_SLIDE_SMALL || _EnemyType == EnemyType.GROUND_SLIDE_TOP)
+    /*if (_EnemyType == EnemyType.GROUND_SLIDE || _EnemyType == EnemyType.GROUND_SLIDE_MEDIUM || _EnemyType == EnemyType.GROUND_SLIDE_SMALL || _EnemyType == EnemyType.GROUND_SLIDE_TOP)
     {
       _EnemyNoise.pitch = Time.timeScale;
-    }
+    }*/
     // Make sure not under map
     if (_rb.position.y < -8.5f)
     {
       Die(false);
     }
 
+    // Make sure not flying towards player very quickly
     if (_rb.velocity.x < -8f)
     {
       _rb.velocity = Vector3.zero;
     }
+
+    // Make sure not stuck
+    if (transform.position.x > GameResources.s_Instance._SpawnLine.GetChild(0).position.x)
+    {
+      if (Time.time - _spawnTime > 15f)
+        _ForceModifier = _forceModSave + (Time.time - _spawnTime - 15f) * 0.1f;
+    }
+    else
+    {
+      _ForceModifier = _forceModSave;
+    }
   }
 
   float _timer = 1f;
-
   void Move()
   {
     if (_IsDead) return;
@@ -99,82 +123,114 @@ public class EnemyScript : MonoBehaviour
         _rb.AddTorque(8f * _ForceModifier);
         break;
       case (EnemyType.GROUND_ROLL_SMALL):
-        _rb.AddTorque(3f * _ForceModifier);
+        _rb.AddTorque(2.8f * _ForceModifier);
         break;
       case (EnemyType.GROUND_ROLL_ARMOR_2):
-        _rb.AddTorque(8f * _ForceModifier);
+        _rb.AddTorque(9.6f * _ForceModifier);
         break;
       case (EnemyType.GROUND_ROLL_ARMOR_4):
-        _rb.AddTorque(8f * _ForceModifier);
+        _rb.AddTorque(11f * _ForceModifier);
         break;
       case (EnemyType.GROUND_ROLL_ARMOR_8):
-        _rb.AddTorque(8f * _ForceModifier);
+        _rb.AddTorque(21f * _ForceModifier);
         break;
+      case (EnemyType.GROUND_ROLL_STONE_2):
+        _rb.AddTorque(16f * _ForceModifier);
+        break;
+
       case (EnemyType.CRATE):
         _rb.AddTorque(8f * _ForceModifier);
         break;
       case (EnemyType.GROUND_POP):
-        if (_rb.position.x > GameObject.Find("Bar").transform.position.x)
+        if (_rb.position.x > GameResources.s_Instance._SpawnLine.GetChild(0).position.x)
         {
-          _rb.AddTorque(8f * _ForceModifier);
+          _rb.AddTorque(6f * _ForceModifier);
           break;
         }
         _timer -= Time.fixedDeltaTime;
-        if (_timer < 0f && _rb.position.y < -3f)
+        if (_timer < 0f && _rb.position.y < -3f && Mathf.Abs(_rb.velocity.y) < 0.2f)
         {
-          _rb.velocity = Vector3.zero;
-          _rb.AddTorque(2000f * _ForceModifier);
-          _rb.AddForce(new Vector2(-200f, 1000f) * _ForceModifier);
+          //_rb.velocity = Vector3.zero;
+          _rb.AddTorque(100f * _ForceModifier);
+          _rb.AddForce(new Vector2(-150f * Random.Range(0.7f, 1.1f), 775f * Random.Range(0.55f, 1.1f)) * _ForceModifier);
 
           _timer = 3f + Random.value * 3f;
 
+          _EnemyNoise.pitch = _pitchSave + Random.Range(-1f, 1f) * 0.15f;
           _EnemyNoise.Play();
         }
         break;
+
       case (EnemyType.GROUND_POP_FLOAT):
-        if (_rb.position.x > GameObject.Find("Bar").transform.position.x)
+
+        // In spawn
+        if (_rb.position.x > GameResources.s_Instance._SpawnLine.GetChild(0).position.x)
         {
-          _rb.AddTorque(8f * _ForceModifier);
+          if (_rb.angularDrag != 1.8f)
+            _rb.angularDrag = 1.8f;
+          _rb.AddTorque(7f * _ForceModifier);
           _timer = 1f + Random.value * 4f;
           break;
         }
+
+        // At tower
         if (_rb.position.x < -2f)
         {
           _rb.gravityScale = 1f;
+          _rb.constraints = RigidbodyConstraints2D.None;
           break;
         }
-        _timer -= Time.fixedDeltaTime;
+
+        // In between; roll
+        _timer -= Time.deltaTime;
         if (_timer > 0f && _rb.gravityScale == 1f)
         {
-          _rb.AddTorque(8f * _ForceModifier);
+          if (_rb.angularDrag != 1.8f && _rb.velocity.y < 0.3f)
+            _rb.angularDrag = 1.8f;
+          _rb.AddTorque(7f * _ForceModifier);
         }
+
+        // Right before hitting tower, sometimes start floating again to trick
         if (_rb.gravityScale == 0f)
         {
           if (_timer < 0f || _rb.position.x < -3f)
           {
             _timer = 3f + Random.value * 3f;
             _rb.gravityScale = 1f;
+            _rb.constraints = RigidbodyConstraints2D.None;
           }
-          _rb.AddForce(new Vector3(-1f, 0f, 0f) * 10f);
+
+          var vel = _rb.velocity;
+          vel.x += (-4f - vel.x) * Time.deltaTime * 5f;
+          _rb.velocity = vel;
         }
-        if (_rb.gravityScale == 1f && ((_rb.position.y > 4f && _timer < 0f) || _rb.position.y > 6f))
+
+        // Else, when in air, stop movement and float towards player
+        else
         {
-          _rb.velocity = new Vector3(_rb.velocity.x, 0f, 0f);
-          _rb.gravityScale = 0f;
-          _timer = 2f + Random.value * 3f;
-          break;
+          if (((_rb.position.y > 5.5f && _timer < 0f) || _rb.position.y > 7.5f))
+          {
+            _rb.gravityScale = 0f;
+            _rb.velocity = new Vector3(_rb.velocity.x, 0f, 0f);
+            _rb.drag = 0.01f;
+            _rb.constraints = RigidbodyConstraints2D.FreezePositionY;
+            _timer = 2f + Random.value * 3f;
+            break;
+          }
         }
+
         if (_timer < 0f && _rb.position.y < -5f && _rb.gravityScale == 1f)
         {
-          _rb.velocity = Vector3.zero;
-          _rb.AddTorque(2000f * _ForceModifier);
-          _rb.AddForce(new Vector2(-200f, 1100f) * _ForceModifier);
+          _rb.angularDrag = 0.4f;
+          _rb.AddTorque(100f * _ForceModifier);
+          _rb.AddForce(new Vector2(-150f * Random.Range(0.7f, 1.1f), 775f * Random.Range(0.9f, 1.1f)) * _ForceModifier);
 
           _timer = 1f + Random.value * 2f;
 
           _EnemyNoise.Play();
         }
         break;
+
       case (EnemyType.GROUND_SLIDE):
         _rb.MovePosition(transform.position + new Vector3(-1f, 0f, 0f) * Time.fixedDeltaTime);
         if (transform.position.x < -6f)
@@ -254,46 +310,54 @@ public class EnemyScript : MonoBehaviour
     if (_Sensors.Length == 0) return;
 
     // Check sensors
-    foreach (var r in _Sensors)
+    switch (c.name)
     {
-      var c1 = r.gameObject.GetComponent<Collider2D>();
-      if (c1.GetInstanceID() == c.GetInstanceID())
-      {
-        if (r.material.color == Color.black) break;
-        r.material.color = Color.black;
-
-        // Check towers
-        if (_EnemyType == EnemyType.GROUND_SLIDE || _EnemyType == EnemyType.GROUND_SLIDE_SMALL || _EnemyType == EnemyType.GROUND_SLIDE_MEDIUM || _EnemyType == EnemyType.GROUND_SLIDE_TOP || _EnemyType == EnemyType.GROUND_SLIDE_CASTLE)
+      case "Sensor":
+        foreach (var r in _Sensors)
         {
-
-          // Explosion FX
-          var explosion = Instantiate(Resources.Load("ParticleSystems/ExplosionSystem") as GameObject);
-          explosion.transform.parent = r.transform.parent;
-          explosion.transform.position = r.transform.position;
-          float mag = r.transform.localScale.x;
-          if (mag > 1f)
+          var c1 = r.gameObject.GetComponent<Collider2D>();
+          if (c1.GetInstanceID() == c.GetInstanceID())
           {
-            mag /= 3f;
-          }
-          explosion.transform.localScale = new Vector3(mag, mag, mag);
+            if (r.material.color == Color.black) break;
+            r.material.color = Color.black;
 
-          // Screen shake heavy
-          GameScript.ShakeHeavy();
+            // Check towers
+            if (_EnemyType == EnemyType.GROUND_SLIDE || _EnemyType == EnemyType.GROUND_SLIDE_SMALL || _EnemyType == EnemyType.GROUND_SLIDE_MEDIUM || _EnemyType == EnemyType.GROUND_SLIDE_TOP || _EnemyType == EnemyType.GROUND_SLIDE_CASTLE)
+            {
 
-          // Fire FX
-          if (_Sensors.Length > 1)
-          {
-            var fire = Instantiate(Resources.Load("ParticleSystems/FireSystem") as GameObject);
-            fire.transform.parent = r.transform.parent;
-            fire.transform.position = r.transform.position;
+              // Explosion FX
+              var explosion = Instantiate(Resources.Load("ParticleSystems/ExplosionSystem") as GameObject);
+              explosion.transform.parent = r.transform.parent;
+              explosion.transform.position = r.transform.position;
+              float mag = r.transform.localScale.x;
+              if (mag > 1f)
+              {
+                mag /= 3f;
+              }
+              explosion.transform.localScale = new Vector3(mag, mag, mag);
+
+              // Screen shake heavy
+              GameScript.ShakeHeavy();
+
+              // Fire FX
+              if (_Sensors.Length > 1)
+              {
+                var fire = Instantiate(Resources.Load("ParticleSystems/FireSystem") as GameObject);
+                fire.transform.parent = r.transform.parent;
+                fire.transform.position = r.transform.position;
+              }
+            }
+
+            CheckSensors();
+            return;
           }
         }
+        break;
 
-        CheckSensors();
-        return;
-      }
+      case "Armor":
+        CheckArmor(c);
+        break;
     }
-    CheckArmor(c);
   }
 
   void CheckArmor(Collider2D c)
@@ -302,14 +366,18 @@ public class EnemyScript : MonoBehaviour
     foreach (var r in _Armor)
     {
       if (r == null) continue;
-      var c1 = r.gameObject.GetComponent<Collider>();
+      var c1 = r.gameObject.GetComponent<Collider2D>();
       if (c1.GetInstanceID() == c.GetInstanceID())
       {
         if (r.material.color == Color.black) break;
         r.material.color = Color.black;
         r.gameObject.transform.position += new Vector3(0f, 0f, -4f);
-        r.gameObject.AddComponent<Rigidbody>();
+        var rb = r.gameObject.AddComponent<Rigidbody2D>();
+        rb.mass = 0.15f;
+        Physics2D.IgnoreCollision(GameResources.s_Instance._ColliderGround, c1);
+        c1.isTrigger = true;
         r.gameObject.transform.parent = GameResources.s_Instance._ContainerDead;
+        _rb.mass -= 0.02f;
         return;
       }
     }
@@ -390,6 +458,11 @@ public class EnemyScript : MonoBehaviour
     transform.position += new Vector3(0f, 0f, -5f);
     _rb.velocity = Vector2.zero;
     _rb.angularVelocity = 0f;
+    if (_rb.gravityScale == 0f)
+    {
+      _rb.gravityScale = 1f;
+      _rb.constraints = RigidbodyConstraints2D.None;
+    }
 
     _rb.AddForce(new Vector2(30f, 300f) * _rb.mass);
     if (!istower)
@@ -412,6 +485,7 @@ public class EnemyScript : MonoBehaviour
     PlayerScript.WaveStats._enemiesKilled++;
   }
 
+  float _enemyNoiseLast;
   void OnCollisionEnter2D(Collision2D c)
   {
     if (_IsDead) return;
@@ -429,10 +503,16 @@ public class EnemyScript : MonoBehaviour
     if (c.gameObject.name.Equals("Ground"))
     {
       if (_EnemyNoise != null && _EnemyType != EnemyType.GROUND_POP && _EnemyType != EnemyType.GROUND_POP_FLOAT && _EnemyType != EnemyType.GROUND_SLIDE && _EnemyType != EnemyType.GROUND_SLIDE_MEDIUM && _EnemyType != EnemyType.GROUND_SLIDE_SMALL && _EnemyType != EnemyType.GROUND_TOTEM_5)
-        _EnemyNoise.Play();
+      {
+        if (Time.time - _enemyNoiseLast < 0.4f)
+        {
+          _enemyNoiseLast = Time.time;
+          _EnemyNoise.Play();
+        }
+      }
       return;
     }
-    _rb.AddForce(new Vector3(0f, 1f, 0f) * 100f * _rb.mass);
+    _rb.AddForce(new Vector2(0f, 1f) * 100f * _rb.mass);
   }
 
   static GameObject _castle;
@@ -461,6 +541,10 @@ public class EnemyScript : MonoBehaviour
       case (EnemyType.GROUND_ROLL_ARMOR_8):
         enemyName = "Enemy13";
         break;
+      case (EnemyType.GROUND_ROLL_STONE_2):
+        enemyName = "Enemy_stone0";
+        break;
+
       case (EnemyType.GROUND_POP):
         enemyName = "Enemy4";
         break;
@@ -472,32 +556,32 @@ public class EnemyScript : MonoBehaviour
         break;
       case (EnemyType.GROUND_SLIDE_SMALL):
         enemyName = (Mathf.RoundToInt(Random.value) == 0 ? "Enemy11" : "Enemy11.1");
-        spawnPos = spawnLine.position + new Vector3(-10f + Random.value * 6f, 0f, 0f);
+        spawnPos = spawnLine.position + new Vector3(-10f + Random.value * 7f, 0f, 0f);
         spawnPos.y = -7.4f;
         break;
       case (EnemyType.GROUND_SLIDE_MEDIUM):
         enemyName = (Mathf.RoundToInt(Random.value) == 0 ? "Enemy15" : "Enemy15.1");
-        spawnPos = spawnLine.position + new Vector3(-10f + Random.value * 6f, 0f, 0f);
+        spawnPos = spawnLine.position + new Vector3(-10f + Random.value * 7f, 0f, 0f);
         spawnPos.y = -7.4f;
         break;
       case (EnemyType.GROUND_SLIDE):
         enemyName = (Mathf.RoundToInt(Random.value) == 0 ? "Enemy9" : "Enemy9.1");
-        spawnPos = spawnLine.position + new Vector3(-10f + Random.value * 6f, 0f, 0f);
+        spawnPos = spawnLine.position + new Vector3(-10f + Random.value * 7f, 0f, 0f);
         spawnPos.y = -7.4f;
         break;
       case (EnemyType.GROUND_SLIDE_TOP):
         enemyName = "Enemy19";
-        spawnPos = spawnLine.position + new Vector3(-10f + Random.value * 6f, 0f, 0f);
+        spawnPos = spawnLine.position + new Vector3(-10f + Random.value * 7f, 0f, 0f);
         spawnPos.y = -7.4f;
         break;
       case (EnemyType.GROUND_SLIDE_CASTLE):
         enemyName = "Enemy22";
-        spawnPos = spawnLine.position + new Vector3(-10f + Random.value * 6f, 0f, 0f);
+        spawnPos = spawnLine.position + new Vector3(-10f + Random.value * 7f, 0f, 0f);
         spawnPos.y = -7.4f;
         break;
       case (EnemyType.GROUND_TOTEM_5):
         enemyName = (Mathf.RoundToInt(Random.value) == 0 ? "Enemy17" : "Enemy18");
-        spawnPos = spawnLine.position + new Vector3(-10f + Random.value * 6f, 0f, 0f);
+        spawnPos = spawnLine.position + new Vector3(-10f + Random.value * 7f, 0f, 0f);
         spawnPos.y = -7.4f;
         break;
       case (EnemyType.BOSS):
@@ -514,7 +598,7 @@ public class EnemyScript : MonoBehaviour
 
     enemy.name = enemyName;
     enemy.transform.parent = GameObject.Find("Alive").transform;
-    enemy.transform.position = (spawnPos == Vector3.zero ? new Vector3(58f, 17f, 0f) : spawnPos);
+    enemy.transform.position = (spawnPos == Vector3.zero ? new Vector3(58f + Random.Range(-1f, 1f), 17f + Random.Range(0f, 2f), 0f) : spawnPos);
     var script = enemy.GetComponent<EnemyScript>();
 
     // Init enemy script
@@ -533,40 +617,43 @@ public class EnemyScript : MonoBehaviour
     switch (_EnemyType)
     {
       case (EnemyType.GROUND_ROLL):
-        numCoins = 5;
+        numCoins = 10;
+        break;
+      case (EnemyType.GROUND_ROLL_SMALL):
+        numCoins = 15;
         break;
       case (EnemyType.GROUND_POP):
         numCoins = 20;
         break;
       case (EnemyType.GROUND_POP_FLOAT):
-        numCoins = 35;
-        break;
-      case (EnemyType.GROUND_ROLL_SMALL):
-        numCoins = 15;
+        numCoins = 25;
         break;
       case (EnemyType.GROUND_ROLL_ARMOR_2):
         numCoins = 25;
         break;
       case (EnemyType.GROUND_ROLL_ARMOR_4):
-        numCoins = 50;
+        numCoins = 35;
         break;
       case (EnemyType.GROUND_ROLL_ARMOR_8):
-        numCoins = 75;
+        numCoins = 50;
+        break;
+      case (EnemyType.GROUND_ROLL_STONE_2):
+        numCoins = 50;
         break;
       case (EnemyType.GROUND_SLIDE_SMALL):
         numCoins = 25;
         GameScript.Freeze();
         break;
       case (EnemyType.GROUND_SLIDE_MEDIUM):
-        numCoins = 50;
+        numCoins = 35;
         GameScript.Freeze();
         break;
       case (EnemyType.GROUND_SLIDE):
-        numCoins = 100;
+        numCoins = 50;
         GameScript.Freeze();
         break;
       case (EnemyType.GROUND_SLIDE_TOP):
-        numCoins = 75;
+        numCoins = 50;
         GameScript.Freeze();
         break;
       case (EnemyType.GROUND_SLIDE_CASTLE):

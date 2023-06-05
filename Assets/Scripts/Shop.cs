@@ -12,6 +12,13 @@ static public class Shop
     TRI_SHOT,
     TRI_SHOT_COUNTER,
 
+    ARROW_RAIN,
+    ARROW_RAIN_COUNTER,
+
+    ARROW_PENETRATION,
+    ARROW_PENETRATION_COUNTER,
+
+    ARROW_STRENGTH,
     AMMO_MAX,
     HEALTH,
   }
@@ -22,19 +29,33 @@ static public class Shop
     public UpgradeType _Type;
 
     // Amount in inv
-    public int _Count;
+    public int _Count, _CountStart,
+      _MaxPurchases;
     public UpgradeType _CountUpgrade;
     public bool _Enabled;
 
-    // Shop price
-
+    // Shop prices
+    public int[] _Costs;
 
     // Display
     public bool _Active;
     public MeshRenderer[] _Counters;
+    public string _Desc { get { return GetUpgradeDesc(_Type, _Count); } }
 
     // Function
-    public System.Action<UpgradeType> _OnUnlock;
+    public System.Action<UpgradeType> _OnPurchase;
+    public System.Func<Upgrade, int> _GetRealCostIter;
+
+    // Functions
+    public int GetCurrentCost()
+    {
+      if (_Costs == null)
+      {
+        Debug.LogWarning($"No costs for {_Type}");
+        return 0;
+      }
+      return _GetRealCostIter != null ? _Costs[_GetRealCostIter.Invoke(this)] : _Costs[_Count];
+    }
   }
   static Dictionary<UpgradeType, Upgrade> s_upgrades;
   static UpgradeType[] s_upgradesActive;
@@ -57,71 +78,277 @@ static public class Shop
     // Wave
     Wave.s_MetaWaveIter = PlayerPrefs.GetInt($"{savepre}_wave", 0);
 
-    // Upgrades
+    /// Upgrades
+
+    // Cost
+    int[] GetUpgradeCosts(UpgradeType upgradeType)
+    {
+
+      switch (upgradeType)
+      {
+
+        //case UpgradeType.TRI_SHOT:
+        //  return new int[] { 0 };
+        case UpgradeType.TRI_SHOT_COUNTER:
+        case UpgradeType.ARROW_RAIN_COUNTER:
+          return new int[] { 0, 100, 200, 350, 500, 750, 900, 1200 };
+        case UpgradeType.HEALTH:
+          return new int[] { 150, 300 };
+        case UpgradeType.ARROW_STRENGTH:
+          return new int[] { 150, 250, 350, 500, 750 };
+
+        default:
+          return null;
+
+      }
+
+    }
+
+    //
+    int GetCountStart(UpgradeType upgradeType)
+    {
+      switch (upgradeType)
+      {
+
+        case UpgradeType.TRI_SHOT_COUNTER:
+          return 10;
+
+        case UpgradeType.ARROW_RAIN_COUNTER:
+          return 25;
+
+        default:
+          return 0;
+
+      }
+    }
+
+    //
+    int GetMaxPurchases(UpgradeType upgradeType)
+    {
+      switch (upgradeType)
+      {
+
+        case UpgradeType.TRI_SHOT:
+          return 2;
+        case UpgradeType.TRI_SHOT_COUNTER:
+          return 7;
+
+        case UpgradeType.ARROW_RAIN:
+          return 3;
+        case UpgradeType.ARROW_RAIN_COUNTER:
+          return 5;
+
+        case UpgradeType.ARROW_STRENGTH:
+          return 5;
+        case UpgradeType.AMMO_MAX:
+          return 2;
+
+        default:
+          return 0;
+
+      }
+    }
+
+    // Load
     s_upgrades = new Dictionary<UpgradeType, Upgrade>();
     foreach (UpgradeType upgradeType in System.Enum.GetValues(typeof(UpgradeType)))
     {
 
+      var count = PlayerPrefs.GetInt($"{savepre}_{upgradeType}", 0);
       s_upgrades.Add(upgradeType, new Upgrade()
       {
         _Type = upgradeType,
-        _Count = PlayerPrefs.GetInt($"{savepre}_{upgradeType}", 0),
+        _Count = count,
+        _CountStart = GetCountStart(upgradeType),
+        _MaxPurchases = GetMaxPurchases(upgradeType),
 
-        _CountUpgrade = upgradeType
+        _CountUpgrade = upgradeType,
+
+        _Costs = GetUpgradeCosts(upgradeType)
       });
+
+      //Debug.Log($"Loaded {upgradeType}: {count}");
     }
 
     // Custom
-    var upgrade = s_upgrades[UpgradeType.TRI_SHOT];
+    void UpdateUpgrade(UpgradeType upgradeType, System.Func<Upgrade, Upgrade> upgradeUpdate)
     {
-      upgrade._CountUpgrade = UpgradeType.TRI_SHOT_COUNTER;
-      upgrade._OnUnlock = (UpgradeType upgradeType) =>
+      var upgrade = s_upgrades[upgradeType];
+      upgrade = upgradeUpdate.Invoke(upgrade);
+      s_upgrades[upgradeType] = upgrade;
+    }
+
+    System.Action<UpgradeType>
+      PurchaseFunction_CountPlus = null;
+    System.Func<Upgrade, int> RealCountIndexFunction_Basic = null;
+    System.Func<Upgrade, Upgrade>
+      UpdateFunction_CountPlus = null,
+      UpdateFunction_CountPlusOnPurchase = null,
+      UpdateFunction_DeincrementActive = null,
+      UpdateFunction_RemoveMaxPurchases = null;
+
+    UpdateFunction_CountPlus = (Upgrade u) =>
+    {
+      u._Count++;
+      return u;
+    };
+    UpdateFunction_CountPlusOnPurchase = (Upgrade u) =>
+    {
+      u._OnPurchase += PurchaseFunction_CountPlus;
+      return u;
+    };
+
+    UpdateFunction_DeincrementActive = (Upgrade u) =>
+    {
+      if (u._Counters == null) return u;
+      u._Count = GetUpgradeCountMax(u._Type) - 1;
+      return u;
+    };
+    UpdateFunction_RemoveMaxPurchases = (Upgrade u) =>
+    {
+      if (u._MaxPurchases != 0 && Mathf.Abs(u._CountStart - u._Count) >= u._MaxPurchases)
+        s_shopSelections.Remove(u._Type);
+      return u;
+    };
+
+    PurchaseFunction_CountPlus = (UpgradeType upgradeType) =>
+    {
+      UpdateUpgrade(upgradeType, UpdateFunction_CountPlus);
+    };
+
+    RealCountIndexFunction_Basic = (Upgrade u) =>
+    {
+      var count = GetUpgradeCountMax(u._Type);
+      if (count == 0)
+        return 0;
+      return u._CountStart - count + 1;
+    };
+
+    void UpdateNormalUpgrade(UpgradeType upgradeType, UpgradeType counterUpgrade)
+    {
+      UpdateUpgrade(upgradeType, (Upgrade u) =>
       {
+        u._CountUpgrade = counterUpgrade;
 
-        // Configure sub upgrades
-        var supgrade = s_upgrades[upgradeType];
+        u._OnPurchase = PurchaseFunction_CountPlus;
+        u._OnPurchase += (UpgradeType upgradeType) =>
         {
-          supgrade._Count++;
-        }
-        s_upgrades[upgradeType] = supgrade;
 
-        // First upgrade
-        if (supgrade._Count == 1)
-        {
-          supgrade = s_upgrades[UpgradeType.TRI_SHOT_COUNTER];
+          UpdateUpgrade(upgradeType, (Upgrade u_) =>
           {
-            supgrade._Count = 8;
-          }
-          s_upgrades[UpgradeType.TRI_SHOT_COUNTER] = supgrade;
 
-          s_shopSelections.Add(UpgradeType.TRI_SHOT_COUNTER);
-          TryPurchase(UpgradeType.TRI_SHOT_COUNTER);
-        }
+            // If first purchase; give counter as well
+            if (u_._Count == 1)
+            {
 
-      };
+              // Assign counter
+              UpdateUpgrade(counterUpgrade, (Upgrade su) =>
+              {
+                su._Count = su._CountStart;
+                return su;
+              });
+              TryPurchase(counterUpgrade);
+
+              // Add to shop to purchase
+              s_shopSelections.Add(counterUpgrade);
+            }
+
+            else if (u_._Count >= GetMaxPurchases(upgradeType))
+            {
+              s_shopSelections.Remove(upgradeType);
+            }
+
+            return u_;
+          });
+
+        };
+
+        return u;
+      });
+
+      UpdateUpgrade(counterUpgrade, (Upgrade u) =>
+      {
+        u._Active = true;
+
+        //
+        u._OnPurchase += (UpgradeType upgradeType) =>
+        {
+
+          // Deincrement counter and remove from shop selections if reached max purchases
+          UpdateUpgrade(upgradeType, UpdateFunction_DeincrementActive);
+          UpdateUpgrade(upgradeType, UpdateFunction_RemoveMaxPurchases);
+        };
+
+        u._GetRealCostIter = RealCountIndexFunction_Basic;
+
+        return u;
+      });
     }
-    s_upgrades[UpgradeType.TRI_SHOT] = upgrade;
 
-    upgrade = s_upgrades[UpgradeType.TRI_SHOT_COUNTER];
+    // Active upgrades
+    UpdateNormalUpgrade(UpgradeType.TRI_SHOT, UpgradeType.TRI_SHOT_COUNTER);
+    UpdateNormalUpgrade(UpgradeType.ARROW_RAIN, UpgradeType.ARROW_RAIN_COUNTER);
+
+    // Shoot strength
+    UpdateUpgrade(UpgradeType.ARROW_STRENGTH, UpdateFunction_CountPlusOnPurchase);
+    UpdateUpgrade(UpgradeType.ARROW_STRENGTH, (Upgrade u) =>
     {
-      upgrade._Active = true;
-
       //
-      upgrade._OnUnlock += (UpgradeType upgradeType) =>
+      u._OnPurchase += (UpgradeType upgradeType) =>
       {
 
-        var supgrade = s_upgrades[upgradeType];
-        {
-          if (supgrade._Counters == null) return;
-          supgrade._Count = GetUpgradeCountMax(upgradeType) - 1;
-          if (supgrade._Count == 3)
-            s_shopSelections.Remove(upgradeType);
-        }
-        s_upgrades[upgradeType] = supgrade;
-
+        // Remove from shop selections if reached max purchases
+        UpdateUpgrade(upgradeType, UpdateFunction_RemoveMaxPurchases);
       };
-    }
-    s_upgrades[UpgradeType.TRI_SHOT_COUNTER] = upgrade;
+
+      return u;
+    });
+
+    // Health
+    UpdateUpgrade(UpgradeType.HEALTH, (Upgrade u) =>
+    {
+
+      // Give player health, then if max health, remove from shop
+      u._OnPurchase += (UpgradeType upgradeType) =>
+      {
+        PlayerScript.AddHealth();
+        if (PlayerScript.GetHealth() == 3)
+          s_shopSelections.Remove(upgradeType);
+      };
+
+      u._GetRealCostIter = (Upgrade u_) =>
+      {
+        return PlayerScript.GetHealth() - 1;
+      };
+
+      return u;
+    });
+
+    // Ammo count
+    UpdateUpgrade(UpgradeType.AMMO_MAX, (Upgrade u) =>
+    {
+
+      // Give player health, then if max health, remove from shop
+      u._OnPurchase += (UpgradeType upgradeType) =>
+      {
+        u._Count++;
+        PlayerScript.SetAmmoMax(u._Count + 3);
+
+        if (u._Count >= GetMaxPurchases(upgradeType))
+        {
+          s_shopSelections.Remove(upgradeType);
+        }
+      };
+
+      u._GetRealCostIter = (Upgrade u_) =>
+      {
+        return PlayerScript.GetAmmoMax() - 3;
+      };
+
+      PlayerScript.SetAmmoMax(u._Count + 3);
+
+      return u;
+    });
 
     //
     BufferActiveUpgrades();
@@ -139,10 +366,24 @@ static public class Shop
     // Add shop selections
     s_shopSelections = new List<UpgradeType>();
 
-    if (GetUpgradeCount(UpgradeType.TRI_SHOT) == 0)
+    // General
+    s_shopSelections.Add(UpgradeType.ARROW_STRENGTH);
+
+    // Active
+    if (GetUpgradeCount(UpgradeType.TRI_SHOT) < GetMaxPurchases(UpgradeType.TRI_SHOT))
       s_shopSelections.Add(UpgradeType.TRI_SHOT);
-    else if (GetUpgradeCountMax(UpgradeType.TRI_SHOT_COUNTER) > 3)
-      s_shopSelections.Add(UpgradeType.TRI_SHOT_COUNTER);
+    if (GetUpgradeCount(UpgradeType.TRI_SHOT) > 0)
+      if (s_upgrades[UpgradeType.TRI_SHOT_COUNTER]._GetRealCostIter.Invoke(s_upgrades[UpgradeType.TRI_SHOT_COUNTER]) < GetMaxPurchases(UpgradeType.TRI_SHOT_COUNTER))
+        s_shopSelections.Add(UpgradeType.TRI_SHOT_COUNTER);
+
+    if (GetUpgradeCount(UpgradeType.ARROW_RAIN) < GetMaxPurchases(UpgradeType.ARROW_RAIN))
+      s_shopSelections.Add(UpgradeType.ARROW_RAIN);
+    if (GetUpgradeCount(UpgradeType.ARROW_RAIN) > 0)
+      if (s_upgrades[UpgradeType.ARROW_RAIN_COUNTER]._GetRealCostIter.Invoke(s_upgrades[UpgradeType.ARROW_RAIN_COUNTER]) < GetMaxPurchases(UpgradeType.ARROW_RAIN_COUNTER))
+        s_shopSelections.Add(UpgradeType.ARROW_RAIN_COUNTER);
+
+    if (GetUpgradeCount(UpgradeType.AMMO_MAX) < GetMaxPurchases(UpgradeType.AMMO_MAX))
+      s_shopSelections.Add(UpgradeType.AMMO_MAX);
   }
 
   // Gather all active upgrades
@@ -175,7 +416,39 @@ static public class Shop
     foreach (UpgradeType upgradeType in System.Enum.GetValues(typeof(UpgradeType)))
     {
       var upgrade_data = s_upgrades[upgradeType];
-      PlayerPrefs.SetInt($"{savepre}_{upgradeType}", upgrade_data._Active ? upgrade_data._Counters.Length : upgrade_data._Count);
+      PlayerPrefs.SetInt($"{savepre}_{upgradeType}", upgrade_data._Active ? upgrade_data._Counters?.Length ?? 0 : upgrade_data._Count);
+    }
+  }
+
+  // Desc
+  static string GetUpgradeDesc(UpgradeType upgradeType, int count)
+  {
+    switch (upgradeType)
+    {
+
+      case UpgradeType.TRI_SHOT:
+        return count == 0 ? "<b>Unlock:</b>\n\tTri-Shot" : "<b>Upgrade:</b>\n\t+2 Tri-Shot arrows";
+
+      case UpgradeType.TRI_SHOT_COUNTER:
+        return "<b>Upgrade:</b>\n\tTri-Shot cooldown";
+
+      case UpgradeType.ARROW_RAIN:
+        return count == 0 ? "<b>Unlock:</b>\n\tArrow Rain" : "<b>Upgrade:</b>\n\t+5 Arrow Rain arrows";
+
+      case UpgradeType.ARROW_RAIN_COUNTER:
+        return "<b>Upgrade:</b>\n\tArrow Rain cooldown";
+
+      case UpgradeType.ARROW_STRENGTH:
+        return "<b>Upgrade:</b>\n\t+Arrow strength";
+
+      case UpgradeType.HEALTH:
+        return "<b>Upgrade:</b>\n\t+1 health";
+
+      case UpgradeType.AMMO_MAX:
+        return "<b>Upgrade:</b>\n\t+1 max ammo";
+
+      default:
+        return "";
     }
   }
 
@@ -187,13 +460,18 @@ static public class Shop
     var upgrade_data = s_upgrades[upgrade];
 
     // Check enough money
+    var cost = upgrade_data.GetCurrentCost();
+    var playerCoins = PlayerScript.GetCoins();
+    if (cost > playerCoins)
+      return false;
 
     // Decrease money
-
-    // Give / save upgrade
+    PlayerScript.SetCoins(playerCoins - cost);
+    SoundPurchase();
 
     // Check function
-    upgrade_data._OnUnlock?.Invoke(upgrade);
+    s_saveCount = upgrade_data._Count;
+    upgrade_data._OnPurchase?.Invoke(upgrade);
 
     // If active upgrade, place skill button
     UpdateUpgradeUI(upgrade, upgrade_data._Active && upgrade_data._Counters != null);
@@ -205,6 +483,7 @@ static public class Shop
     return true;
   }
 
+  static int s_saveCount;
   static void UpdateUpgradeUI(UpgradeType upgrade, bool reset = false)
   {
     var upgrade_data = s_upgrades[upgrade];
@@ -249,12 +528,40 @@ static public class Shop
         for (var i = 0; i < upgrade_data._Count; i++)
         {
           var counter_new = GameObject.Instantiate(counter_.gameObject, counters);
-          counter_new.transform.localPosition += new Vector3(0.09f * i, 0f, 0f);
+
+          // Size
+          var cSpacing = 0.08f;
+          var cSize = 0.05f;
+          if (upgrade_data._Count < 12) { }
+          else // if (upgrade_data._Count < 26)
+          {
+            cSpacing = 0.035f;
+            cSize = 0.025f;
+          }
+
+          if (cSize != 0.05f)
+          {
+            counter_new.transform.localScale = new Vector3(cSize, counter_new.transform.localScale.y, counter_new.transform.localScale.z);
+          }
+
+          counter_new.transform.localPosition += new Vector3(cSpacing * i, 0f, 0f);
 
           upgrade_data._Counters[i] = counter_new.GetComponent<MeshRenderer>();
         }
-        upgrade_data._Count = 0;
 
+        // Reset count
+        upgrade_data._Count = reset ? s_saveCount : 0;
+
+        // Set UI color if count saved
+        if (reset && s_saveCount > 0)
+        {
+          var countIter = 0;
+          foreach (var counter in upgrade_data._Counters)
+          {
+            counter.material.color = s_saveCount == upgrade_data._Counters.Length ? Color.yellow : countIter < s_saveCount ? Color.white : counter.transform.parent.parent.parent.GetChild(0).GetChild(1).GetChild(0).GetComponent<MeshRenderer>().material.color;
+            countIter++;
+          }
+        }
       }
 
       // Save upgrade data
@@ -293,7 +600,15 @@ static public class Shop
     s_upgrades[upgrade] = upgrade_data;
 
     // Update UI
-    upgrade_data._Counters[upgrade_data._Count - 1].material.color = Color.white;
+    if (upgrade_data._Count == upgrade_data._Counters.Length)
+    {
+      foreach (var counter in upgrade_data._Counters)
+      {
+        counter.material.color = Color.yellow;
+      }
+    }
+    else
+      upgrade_data._Counters[upgrade_data._Count - 1].material.color = Color.white;
   }
 
   // Reset a upgrade's UI
@@ -334,14 +649,14 @@ static public class Shop
     return s_upgrades[upgrade]._Enabled;
   }
 
-  static int GetUpgradeCount(UpgradeType upgrade)
+  public static int GetUpgradeCount(UpgradeType upgrade)
   {
     var upgrade_data = s_upgrades[upgrade];
     return upgrade_data._Count;
   }
 
   //
-  static int GetSupgradeCount(UpgradeType upgrade)
+  public static int GetSupgradeCount(UpgradeType upgrade)
   {
     var upgrade_data = s_upgrades[upgrade];
 
@@ -361,7 +676,7 @@ static public class Shop
       return GetUpgradeCountMax(upgrade_data._CountUpgrade);
     }
 
-    return upgrade_data._Counters.Length;
+    return upgrade_data._Counters?.Length ?? 0;
   }
 
   // Check shop UI buttons
@@ -402,26 +717,53 @@ static public class Shop
       MenuManager._shop._menu.transform.GetChild(3).gameObject
     };
     foreach (var button in buttons)
+    {
       button.name = $"empty";
+      UpdateShopButton(button, -1);
+      button.transform.GetChild(2).GetComponent<TextMesh>().text = "";
+    }
+
+    // Custom
+    {
+      // Check health upgrade
+      if (PlayerScript.GetHealth() < 3 && !s_shopSelections.Contains(UpgradeType.HEALTH))
+      {
+        s_shopSelections.Add(UpgradeType.HEALTH);
+      }
+    }
 
     // Assign buttons
     var upgradesCount = Mathf.Clamp(s_shopSelections.Count, 0, 3);
-    Debug.Log(upgradesCount);
     if (upgradesCount == 0)
     {
       Debug.LogWarning("No upgrades!");
       return;
     }
 
+    // Get random upgrades
     var upgradesAvailable = new List<UpgradeType>(s_shopSelections);
     while (true)
     {
 
-      var gotUpgrade = upgradesAvailable[Random.Range(0, upgradesAvailable.Count - 1)];
-      upgradesAvailable.Remove(gotUpgrade);
+      var upgradeType = upgradesAvailable[Random.Range(0, upgradesAvailable.Count)];
+      var upgrade = s_upgrades[upgradeType];
+      upgradesAvailable.Remove(upgradeType);
       var button = buttons[upgradesCount - 1];
-      button.name = $"{gotUpgrade}";
 
+      // Set button name
+      button.name = $"{upgradeType}";
+
+      // Button desc
+      button.transform.GetChild(2).GetComponent<TextMesh>().text = $"{upgrade._Desc}";
+      if (upgrade._Desc.Length == 0)
+      {
+        Debug.LogWarning($"No desc set for {upgrade._Type}");
+      }
+
+      // Cost
+      UpdateShopButton(button, upgrade.GetCurrentCost());
+
+      // Check if any more upgrades to assign
       if (--upgradesCount <= 0) break;
     }
   }
@@ -438,8 +780,10 @@ static public class Shop
   // Update a shop button UI using price
   static void UpdateShopButton(GameObject button, int price)
   {
+
     button.GetComponent<BoxCollider>().enabled = true;
     var t = button.transform.GetChild(1).GetComponent<TextMesh>();
+    button.transform.GetChild(1).name = $"{price}";
 
     // Set text size
     if (price > 999)
@@ -453,7 +797,7 @@ static public class Shop
 
     // Set color
     var r = button.GetComponent<MeshRenderer>();
-    if (price > PlayerScript.GetCoins())
+    if (price == -1 || price > PlayerScript.GetCoins())
     {
       r.material.color = GameObject.Find("BG").GetComponent<MeshRenderer>().material.color * 1.5f;
     }
@@ -461,8 +805,12 @@ static public class Shop
     {
       r.material.color = GameObject.Find("Ground").transform.GetChild(0).GetComponent<MeshRenderer>().material.color;
     }
+
     // Set text
-    t.text = "x" + price;
+    if (price == -1)
+      t.text = "-";
+    else
+      t.text = "x" + price;
   }
 
   // Show / hide shop menu

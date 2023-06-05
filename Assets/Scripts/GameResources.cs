@@ -14,6 +14,8 @@ public class GameResources
 
   public AudioSource _AudioCoinDrop;
 
+  public Collider2D _ColliderGround;
+
   // Constructor
   public static GameResources s_Instance;
   public GameResources()
@@ -30,6 +32,8 @@ public class GameResources
     _ParticlesCoins = GameObject.Find("CoinSystem").GetComponent<ParticleSystem>();
 
     _AudioCoinDrop = GameObject.Find("CoinDrop").GetComponent<AudioSource>();
+
+    _ColliderGround = GameObject.Find("Ground").GetComponent<Collider2D>();
   }
 
 }

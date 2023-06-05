@@ -286,8 +286,6 @@ public class MenuManager
 
         if (Wave.s_MetaWaveIter == 0)
         {
-          Wave.LoadWaves(Wave.s_MetaWaveIter);
-          Wave.StartWaves();
           _pauseButton.SetActive(true);
 
           // Play music

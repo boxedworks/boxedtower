@@ -12,6 +12,7 @@ public class ArrowScript : MonoBehaviour
   public bool _isArrowRain;
 
   // Use this for initialization
+  public Transform[] _children;
   void Start()
   {
     Init();
@@ -42,13 +43,13 @@ public class ArrowScript : MonoBehaviour
 
     if (transform.localPosition.x > 45.2f || transform.localPosition.x < -18f || transform.localPosition.y > 30f || transform.localPosition.y < -14f)
     {
-      transform.GetChild(0).parent = GameResources.s_Instance._ContainerDead;
-      transform.GetChild(1).parent = GameResources.s_Instance._ContainerDead;
+      _children[0].parent = GameResources.s_Instance._ContainerDead;
+      _children[1].parent = GameResources.s_Instance._ContainerDead;
       Destroy(gameObject);
     }
   }
 
-// Pirce
+  // Pirce
   public void ActivatePierce()
   {
     var s = transform.GetChild(2).GetComponent<ParticleSystem>();
@@ -65,27 +66,32 @@ public class ArrowScript : MonoBehaviour
   {
     // Check for trigger
     if (c.isTrigger) return;
-    // Check for tower
+
+    // Check for stone
     if (c.gameObject.name.Equals("Stone")) GameScript.PlaySound(_sHitStone, 0.8f, 2.2f);
+
     // Check out of bounds
     if (c.gameObject.name.Equals("Ground") || c.gameObject.name.Equals("Barrier"))
     {
       Destroy(_rb);
       transform.position += 1.5f * transform.right;
       _sAirNoise.Stop();
-      Destroy(this);
+      CleanUp();
       return;
     }
     // Check enemy
-    EnemyScript s = c.transform.parent.gameObject.GetComponent<EnemyScript>();
-    if (s != null)
+    var enemyScript = c.transform.parent.gameObject.GetComponent<EnemyScript>();
+    if (enemyScript != null)
     {
+      // Play sound FX based on material
+      var sfx = _sHitSensor;
+      if (c.gameObject.name.Equals("Wood")) sfx = _sHitWood;
+      if (c.gameObject.name.Equals("Armor")) sfx = _sHitMetal;
+      if (!c.gameObject.name.Equals("Stone"))
+        GameScript.PlaySound(sfx, 0.8f, 2.2f);
+
       // Check if collider was a sensor
-      AudioSource ss = _sHitSensor;
-      if (c.gameObject.name.Equals("Wood")) ss = _sHitWood;
-      if (c.gameObject.name.Equals("Armor")) ss = _sHitMetal;
-      GameScript.PlaySound(ss, 0.8f, 2.2f);
-      s.CheckHit(c);
+      enemyScript.CheckHit(c);
     }
   }
 
@@ -101,8 +107,13 @@ public class ArrowScript : MonoBehaviour
     if (_triggered) return;
     _triggered = true;
 
-    // Check for tower
-    if (c.gameObject.name.Equals("Stone")) GameScript.PlaySound(_sHitStone, 0.8f, 2.2f);
+    // Check materials
+    AudioSource hitNoise = null;
+    if (c.gameObject.name.Equals("Wood")) hitNoise = _sHitWood;
+    if (c.gameObject.name.Equals("Armor")) hitNoise = _sHitMetal;
+    if (c.gameObject.name.Equals("Stone")) hitNoise = _sHitStone;
+    if (hitNoise != null)
+      GameScript.PlaySound(hitNoise, 0.8f, 1.2f);
     _sAirNoise.Stop();
 
     // Destroy Physics components
@@ -137,10 +148,8 @@ public class ArrowScript : MonoBehaviour
     {
 
       // Play hit FX based on surface
-      var hitNoise = _sHitSensor;
-      if (c.gameObject.name.Equals("Wood")) hitNoise = _sHitWood;
-      if (c.gameObject.name.Equals("Armor")) hitNoise = _sHitMetal;
-      GameScript.PlaySound(hitNoise, 0.8f, 2.2f);
+      if (hitNoise == null)
+        GameScript.PlaySound(_sHitSensor, 0.8f, 2.2f);
 
       // Check if collider was a sensor
       enemyScript.CheckHit(c);
@@ -151,9 +160,9 @@ public class ArrowScript : MonoBehaviour
     }
     transform.GetChild(1).GetComponent<ParticleSystem>().Play();
 
-    // Destory more shit
-    transform.GetChild(0).parent = GameResources.s_Instance._ContainerDead;
-    transform.GetChild(1).parent = GameResources.s_Instance._ContainerDead;
+    // Move particles systems
+    _children[0].parent = GameResources.s_Instance._ContainerDead;
+    _children[1].parent = GameResources.s_Instance._ContainerDead;
 
     // Check if powerup
     if (_isArrowRain)
@@ -162,12 +171,27 @@ public class ArrowScript : MonoBehaviour
     }
 
     // Destroy script
-    Destroy(this);
+    CleanUp();
   }
 
   public void Fired()
   {
     _sAirNoise.Play();
+  }
+
+  void CleanUp()
+  {
+    IEnumerator CleanUpCo()
+    {
+      yield return new WaitForSeconds(5f);
+
+      Destroy(_children[0].gameObject);
+      Destroy(_children[1].gameObject);
+      Destroy(_children[2].gameObject);
+      Destroy(_children[3].gameObject);
+      Destroy(this);
+    }
+    StartCoroutine(CleanUpCo());
   }
 
 }

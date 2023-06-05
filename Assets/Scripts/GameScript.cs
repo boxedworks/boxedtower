@@ -268,10 +268,10 @@ public class GameScript : MonoBehaviour
 
     static void DestroyPS()
     {
-      GameObject dead = GameObject.Find("Dead");
-      for (int i = dead.transform.childCount - 1; i >= 0; i--)
+      var dead = GameResources.s_Instance._ContainerDead;
+      for (var i = dead.childCount - 1; i >= 0; i--)
       {
-        Transform t = dead.transform.GetChild(i);
+        var t = dead.transform.GetChild(i);
         if ((t.gameObject.name.Length > 9 && t.gameObject.name.Substring(0, 9).Equals("Explosion")) ||
             t.gameObject.name.Equals("Trail") || t.gameObject.name.Equals("FireTrail")) Destroy(t.gameObject);
       }
@@ -352,7 +352,7 @@ public class GameScript : MonoBehaviour
     float save = Time.timeScale;
     Time.timeScale = newTime;
     yield return new WaitForSecondsRealtime(amount);
-    Time.timeScale = 1f;
+    Time.timeScale = save;
   }
 
   // Save player stats

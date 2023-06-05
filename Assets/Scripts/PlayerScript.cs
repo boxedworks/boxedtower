@@ -55,6 +55,7 @@ public class PlayerScript : MonoBehaviour
     _health = 2;
 
     _GemColor = GameObject.Find("Play").GetComponent<MeshRenderer>().material.color;
+    _crystal.transform.parent = _tower.transform.parent;
   }
 
   public static void Init()
@@ -68,11 +69,9 @@ public class PlayerScript : MonoBehaviour
   // Update is called once per frame
   void Update()
   {
-    _crystal.transform.Rotate(new Vector3(0f, 1f, 0f) * 100f * Time.deltaTime * (1 + _gemNumber / 500f));
-    _crystal.transform.GetChild(0).GetComponent<MeshRenderer>().material.color = Color.Lerp(_GemColor, Color.white, _gemNumber / 1000);
-    yAdd += (_gemNumber - yAdd) * Time.deltaTime;
-    float AddAmount = yAdd / 500f;
-    _crystal.transform.localPosition = new Vector3(0f, 0f + AddAmount, 0f);
+    _crystal.transform.Rotate(new Vector3(0f, 1f, 0f) * 100f * Time.deltaTime);
+    _crystal.transform.GetChild(0).GetComponent<MeshRenderer>().material.color = Color.Lerp(_GemColor, Color.white, 0 / 1000);
+    _crystal.transform.position += ((_tower.transform.position + new Vector3(0f, -0.5f, 0f)) - _crystal.transform.position) * Time.deltaTime * 2f;
 
     if (!GameScript.StateAtPlay()) return;
     // Increment ammo timer
@@ -127,8 +126,6 @@ public class PlayerScript : MonoBehaviour
     MenuManager._coin.transform.parent.GetChild(1).GetComponent<TextMesh>().text = "x " + _Player._coins;
   }
 
-  float _gemNumber;
-
   public void MouseMove()
   {
     if (Time.time - MenuManager.s_waveStart < 0.25f) return;
@@ -166,7 +163,7 @@ public class PlayerScript : MonoBehaviour
     _indicator2.transform.position = new Vector3(_indicator2.transform.position.x, _indicator2.transform.position.y, -5f);
 
     // Update Tower UI
-    indicatorLength = Mathf.Clamp(indicatorLength, 0f, 8f);
+    indicatorLength = Mathf.Clamp(indicatorLength, 0f, (6.3f + Shop.GetUpgradeCount(Shop.UpgradeType.ARROW_STRENGTH) * 0.85f) * (Time.time - _downTime > 2f ? 1.45f : 1f));
 
     _indicator.transform.localScale = new Vector3(indicatorLength, 1f, 0.25f);
     _indicator.transform.LookAt(transform.position + new Vector3(dist.x, dist.y, transform.position.z), new Vector3(0f, 0f, 1f));
@@ -193,7 +190,7 @@ public class PlayerScript : MonoBehaviour
   }
 
   Vector2 _lastmousepos;
-
+  float _downTime;
   public void MouseDown(bool secondFinger = false)
   {
     if (Time.time - MenuManager.s_waveStart < 0.25f) return;
@@ -210,6 +207,8 @@ public class PlayerScript : MonoBehaviour
     }
 
     // Gameplay
+    _downTime = Time.time;
+
     RaycastHit hit;
     Physics.Raycast(camera.ScreenPointToRay(new Vector3(InputManager._MouseDownPos.x, InputManager._MouseDownPos.y, 0f)), out hit);
     if (!secondFinger)
@@ -263,8 +262,6 @@ public class PlayerScript : MonoBehaviour
       return;
     }
 
-    _gemNumber = 0f;
-
     // Shoot arrow if ready
     if (_shootReady && _ammo > 0)
     {
@@ -273,7 +270,7 @@ public class PlayerScript : MonoBehaviour
       var shotGunEnabled = Shop.UpgradeEnabled(Shop.UpgradeType.TRI_SHOT);
       if (shotGunEnabled)
       {
-        shots *= (Mathf.RoundToInt(Random.value * 7f) == 0 ? 5 : 3);
+        shots *= (Shop.GetUpgradeCount(Shop.UpgradeType.TRI_SHOT) == 1 ? 3 : 5);
         Shop.ResetUpgrade(Shop.UpgradeType.TRI_SHOT);
       }
 
@@ -390,19 +387,19 @@ public class PlayerScript : MonoBehaviour
       var addPos = Vector2.zero;
       if (i == 1)
       {
-        addPos.y = 30f;
+        addPos.y = 40f;
       }
       else if (i == 2)
       {
-        addPos.y = -30f;
+        addPos.y = -40f;
       }
       else if (i == 3)
       {
-        addPos.y = 15f;
+        addPos.y = 20f;
       }
       else if (i == 4)
       {
-        addPos.y = -15f;
+        addPos.y = -20f;
       }
       var ar = Shoot((InputManager._MouseDownPos - InputManager._MouseUpPos + addPos), _indicator.transform.localScale.x * 200f);
       //if (_arrowRain)
@@ -423,17 +420,22 @@ public class PlayerScript : MonoBehaviour
 
   static public IEnumerator ArrowRainCo(float x)
   {
-    for (int i = 0; i < 20; i++)
+    var numArrows = 10 + (Shop.GetUpgradeCount(Shop.UpgradeType.ARROW_RAIN) - 1) * 5;
+    for (var i = 0; i < numArrows; i++)
     {
-      GameObject arrow = _Player.SpawnArrow();
-      arrow.transform.position = new Vector3(-25f + x + i * 1.25f, 25f, 0f);
-      // Fire!
-      Rigidbody rb = arrow.GetComponent<Rigidbody>();
-      rb.isKinematic = false;
-      rb.AddForce(new Vector3(0.75f, -1f, 0f) * 1000f);
 
-      arrow.GetComponent<ArrowScript>().Init();
-      arrow.GetComponent<ArrowScript>().Fired();
+      // Spawn arrow in the air
+      var arrow = _Player.SpawnArrow();
+      arrow.transform.position = new Vector3(-30f + x + i * 1.25f, 25f, 0f);
+
+      // Fire!
+      var rb = arrow.GetComponent<Rigidbody2D>();
+      rb.isKinematic = false;
+      rb.AddForce(new Vector3(1f, 0f) * 1150f);
+
+      arrow.Init();
+      arrow.Fired();
+
       yield return new WaitForSeconds(0.1f);
     }
   }
@@ -452,27 +454,36 @@ public class PlayerScript : MonoBehaviour
     }
 
     // Spawn arrow
-    GameObject arrow = SpawnArrow();
+    var arrow = SpawnArrow();
     arrow.transform.position = transform.position;
 
     // Fire!
     arrow.GetComponent<Rigidbody2D>().bodyType = RigidbodyType2D.Dynamic;
-    arrow.GetComponent<ArrowScript>().Init();
-    arrow.GetComponent<ArrowScript>().Fired();
+    arrow.Init();
+    arrow.Fired();
 
     // Check if pierce is enabled
     //if (_pierce)
     //  arrow.GetComponent<ArrowScript>().ActivatePierce();
+
+    // Check arrow rain
+    var arrowRainEnabled = Shop.UpgradeEnabled(Shop.UpgradeType.ARROW_RAIN);
+    if (arrowRainEnabled)
+    {
+      arrow._isArrowRain = true;
+      Shop.ResetUpgrade(Shop.UpgradeType.ARROW_RAIN);
+    }
 
     // Apply force
     arrow.GetComponent<Rigidbody2D>().AddForce(dir.normalized * force);
 
     // Update arrow UI
     UIUpdateAmmoCounter();
-    return arrow;
+
+    return arrow.gameObject;
   }
 
-  GameObject SpawnArrow()
+  ArrowScript SpawnArrow()
   {
     // Spawn arrow
     var arrow = Instantiate(_arrow);
@@ -489,7 +500,7 @@ public class PlayerScript : MonoBehaviour
       Physics2D.IgnoreCollision(c, arrows.transform.GetChild(i).GetChild(4).GetComponent<Collider2D>());
     }
     arrow.transform.parent = arrows.transform;
-    return arrow;
+    return arrow.GetComponent<ArrowScript>();
   }
 
   public static int GetCoins()
@@ -521,7 +532,7 @@ public class PlayerScript : MonoBehaviour
 
   static void ToggleFire(bool toggle)
   {
-    GameObject fire = GameObject.Find("TowerFire");
+    var fire = GameObject.Find("TowerFire");
     if (toggle)
     {
       for (int i = 0; i < fire.transform.childCount; i++)
