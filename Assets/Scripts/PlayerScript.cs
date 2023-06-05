@@ -74,6 +74,7 @@ public class PlayerScript : MonoBehaviour
     _crystal.transform.position += ((_tower.transform.position + new Vector3(0f, -0.5f, 0f)) - _crystal.transform.position) * Time.deltaTime * 2f;
 
     if (!GameScript.StateAtPlay()) return;
+    
     // Increment ammo timer
     if (_ammo < _maxAmmo)
     {
