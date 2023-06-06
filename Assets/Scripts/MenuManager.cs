@@ -43,7 +43,7 @@ public class MenuManager
   public class CMenu
   {
     // Desired transform.y values for hiden and !hiden
-    static Vector2 YPOS = new Vector2(0f, 55f);
+    static Vector2 YPOS = new Vector2(0f, 70f);
 
     // Local
     public GameObject _menu;
@@ -82,14 +82,14 @@ public class MenuManager
     public void Hide()
     {
       _Visible = false;
-      GameScript._Game.StartCoroutine(HideCo(this));
+      GameScript.s_Instance.StartCoroutine(HideCo(this));
     }
 
     // Show menu wrapper
     public void Show()
     {
       _Visible = true;
-      GameScript._Game.StartCoroutine(ShowCo(this));
+      GameScript.s_Instance.StartCoroutine(ShowCo(this));
     }
 
     // Toggle
@@ -150,7 +150,7 @@ public class MenuManager
   // Show a menu after a given time
   static public void ShowMenuAfterTime(CMenu menu, float time)
   {
-    GameScript._Game.StartCoroutine(MenuDelay(menu, time));
+    GameScript.s_Instance.StartCoroutine(MenuDelay(menu, time));
   }
   static IEnumerator MenuDelay(CMenu menu, float time)
   {
@@ -173,7 +173,7 @@ public class MenuManager
     int lastCoin = PlayerPrefs.GetInt("TotalCoins", 0);
     PlayerPrefs.SetInt("TotalCoins", lastCoin + PlayerScript.WaveStats._coinsGained);
 
-    GameScript._Game.StartCoroutine(ShowStatsCo());
+    GameScript.s_Instance.StartCoroutine(ShowStatsCo());
     MenuManager._pauseButton.SetActive(false);
   }
   static IEnumerator ShowStatsCo()
@@ -250,7 +250,7 @@ public class MenuManager
     _mainMenu.Show();
     _musicButton.SetActive(false);
     // Stop music
-    AudioSource s = GameScript._Game.GetComponent<AudioSource>();
+    AudioSource s = GameScript.s_Instance.GetComponent<AudioSource>();
     if (s.isPlaying)
     {
       s.Stop();
@@ -289,7 +289,7 @@ public class MenuManager
           _pauseButton.SetActive(true);
 
           // Play music
-          var s = GameScript._Game.GetComponent<AudioSource>();
+          var s = GameScript.s_Instance.GetComponent<AudioSource>();
           if (!s.isPlaying)
           {
             s.Play();
@@ -351,7 +351,8 @@ public class MenuManager
     }
 
     // Check shop
-    else{
+    else if (hit.transform.parent.name == "Shop")
+    {
       Shop.ShopInput(hit.collider.name);
     }
   }
@@ -374,7 +375,7 @@ public class MenuManager
     GameScript._state = GameScript.GameState.PLAY;
     _pauseButton.SetActive(true);
     // Play music
-    AudioSource s = GameScript._Game.GetComponent<AudioSource>();
+    AudioSource s = GameScript.s_Instance.GetComponent<AudioSource>();
     if (!s.isPlaying)
     {
       s.Play();
@@ -388,9 +389,9 @@ public class MenuManager
 
   public static void ToggleMusic()
   {
-    AudioSource s = GameScript._Game.GetComponent<AudioSource>();
-    GameScript._musicPlaying = !GameScript._musicPlaying;
-    if (GameScript._musicPlaying)
+    var s = GameScript.s_Instance.GetComponent<AudioSource>();
+    GameScript.s_musicPlaying = !GameScript.s_musicPlaying;
+    if (GameScript.s_musicPlaying)
     {
       s.volume = 0.4f;
       _musicButton.GetComponent<MeshRenderer>().material.color = GameObject.Find("Stone").GetComponent<MeshRenderer>().material.color;
@@ -400,8 +401,9 @@ public class MenuManager
       s.volume = 0f;
       _musicButton.GetComponent<MeshRenderer>().material.color = Color.black;
     }
+
     // Save
-    PlayerPrefs.SetInt("Music", GameScript._musicPlaying ? 1 : 0);
+    PlayerPrefs.SetInt("Music", GameScript.s_musicPlaying ? 1 : 0);
   }
 
 }

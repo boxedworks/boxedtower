@@ -87,7 +87,7 @@ public class TargetScript : MonoBehaviour {
         if (_dead) return;
         if (c.gameObject.name.Equals("Tower"))
         {
-            PlayerScript._Player.Hit();
+            PlayerScript.s_Singleton.Hit();
             Die(false);
         }
     }

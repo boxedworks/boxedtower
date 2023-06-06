@@ -5,7 +5,7 @@ using UnityEngine;
 public class GameScript : MonoBehaviour
 {
 
-  public static GameScript _Game;
+  public static GameScript s_Instance;
 
   public float _dayAmount;
 
@@ -14,7 +14,7 @@ public class GameScript : MonoBehaviour
   public static GameState _state;
   public static GameMode _mode;
 
-  public static bool _musicPlaying, s_HasWon;
+  public static bool s_musicPlaying, s_HasWon;
 
   static Color _SkyColor;
 
@@ -38,7 +38,7 @@ public class GameScript : MonoBehaviour
   // Use this for initialization
   void Start()
   {
-    _Game = this;
+    s_Instance = this;
 
     // Init helpers
     new GameResources();
@@ -50,7 +50,7 @@ public class GameScript : MonoBehaviour
     UpdateResolution();
 
 
-    _musicPlaying = true;
+    s_musicPlaying = true;
 
     _state = GameState.MAIN_MENU;
 
@@ -145,18 +145,6 @@ public class GameScript : MonoBehaviour
           Targets.Update();
           break;
       }
-    }
-
-    // Day / Night cycles
-    var sun = GameResources.s_Instance._Sun;
-    sun.transform.position = Vector3.Lerp(new Vector3(42.1f, -13f, 3f), new Vector3(33.5f, 15.7f, 3f), _dayAmount);
-    sun.transform.GetChild(0).GetComponent<Light>().intensity = Mathf.Lerp(0.1f, 1f, _dayAmount);
-
-    Color c = Color.Lerp(_SkyColor / 1.75f, _SkyColor, _dayAmount);
-    GameObject sky = GameObject.Find("Sky");
-    for (int i = 0; i < sky.transform.childCount; i++)
-    {
-      sky.transform.GetChild(i).GetComponent<MeshRenderer>().material.color = c;
     }
 
     _timeCycle -= Time.deltaTime;
@@ -278,16 +266,36 @@ public class GameScript : MonoBehaviour
     }
   }
 
+  // Day / Night cycles
+  static void SetTimeStuff()
+  {
+    var sun = GameResources.s_Instance._Sun;
+    var sky = GameResources.s_Instance._Sky;
+
+    sun.transform.position = Vector3.Lerp(new Vector3(35.9f, 0f, 3f), new Vector3(47.2f, 18.4f, 3f), GameScript.s_Instance._dayAmount);
+    sun.transform.GetChild(0).GetComponent<Light>().intensity = Mathf.Lerp(0.1f, 1f, GameScript.s_Instance._dayAmount);
+
+    var c = Color.Lerp(_SkyColor / 1.4f, _SkyColor, GameScript.s_Instance._dayAmount);
+    for (var i = 0; i < sky.transform.childCount; i++)
+    {
+      sky.transform.GetChild(i).GetComponent<MeshRenderer>().material.color = c;
+    }
+  }
+
   static IEnumerator TurnDayCo(float time)
   {
-    float saveTime = time;
+
+    var saveTime = time;
     while (time > 0f)
     {
       time -= 0.01f;
       yield return new WaitForSeconds(0.01f);
-      _Game._dayAmount = 1f - time / saveTime;
+      s_Instance._dayAmount = 1f - time / saveTime;
+
+      SetTimeStuff();
     }
-    _Game._dayAmount = 1f;
+    s_Instance._dayAmount = 1f;
+    SetTimeStuff();
   }
 
   static IEnumerator TurnNightCo(float time)
@@ -297,21 +305,24 @@ public class GameScript : MonoBehaviour
     {
       time -= 0.01f;
       yield return new WaitForSeconds(0.01f);
-      _Game._dayAmount = time / saveTime;
+      s_Instance._dayAmount = time / saveTime;
+
+      SetTimeStuff();
     }
-    _Game._dayAmount = 0f;
+    s_Instance._dayAmount = 0f;
+    SetTimeStuff();
   }
 
   public static void TurnDay()
   {
-    if (_Game._dayAmount != 0f) return;
-    _Game.StartCoroutine(TurnDayCo(20f));
+    if (s_Instance._dayAmount != 0f) return;
+    s_Instance.StartCoroutine(TurnDayCo(20f));
   }
 
   public static void TurnNight()
   {
-    if (_Game._dayAmount != 1f) return;
-    _Game.StartCoroutine(TurnNightCo(20f));
+    if (s_Instance._dayAmount != 1f) return;
+    s_Instance.StartCoroutine(TurnNightCo(20f));
   }
 
   static float _shake, _shakeAmount, _decreaseFactor;
@@ -330,7 +341,7 @@ public class GameScript : MonoBehaviour
   static void UpdateScreenShake()
   {
     var camera = GameResources.s_Instance._CameraMain;
-    camera.transform.localPosition = new Vector3(12.7f, 5.11f, -50f);
+    camera.transform.localPosition = new Vector3(15.5f, 7.2f, -50f);
     if (_shake > 0f && _state == GameState.PLAY)
     {
       camera.transform.localPosition += UnityEngine.Random.insideUnitSphere * _shakeAmount;
@@ -344,7 +355,7 @@ public class GameScript : MonoBehaviour
 
   static public void Freeze()
   {
-    _Game.StartCoroutine(TurnTimeFor(0f, 0.2f));
+    s_Instance.StartCoroutine(TurnTimeFor(Time.timeScale == 2.5f ? 1f : 0f, 0.2f));
   }
 
   static IEnumerator TurnTimeFor(float newTime, float amount)
@@ -510,7 +521,7 @@ public class GameScript : MonoBehaviour
     }
 
     // Stop music
-    GameScript._Game.GetComponent<AudioSource>().Stop();
+    GameScript.s_Instance.GetComponent<AudioSource>().Stop();
 
     // Set state
     _state = GameState.LOSE;
@@ -532,8 +543,8 @@ public class GameScript : MonoBehaviour
 
     // Win noise
     GameScript.PlaySound(GameObject.Find("Lose"));
-    _Game.StartCoroutine(WinCo());
-    _Game.StartCoroutine(CoinFall());
+    s_Instance.StartCoroutine(WinCo());
+    s_Instance.StartCoroutine(CoinFall());
     MenuManager.ShowMenuAfterTime(MenuManager._winMenu, 5f);
     MenuManager.ToggleGameUI(false);
     MenuManager._pauseButton.SetActive(false);
@@ -543,7 +554,7 @@ public class GameScript : MonoBehaviour
 
     // Reset local game
     ResetGame();
-    _Game.StartCoroutine(MenuManager.ShowWinStats());
+    s_Instance.StartCoroutine(MenuManager.ShowWinStats());
   }
 
   static public TargetScript SpawnTarget(Vector2 position, float size = 1f, TargetScript.TargetType type = TargetScript.TargetType.ROLL)
@@ -571,21 +582,21 @@ public class GameScript : MonoBehaviour
   {
     if (_mode == newMode) return;
     GameObject barrier = GameObject.Find("BarrierMod"),
-        spawnLine = GameObject.Find("SpawnLine"),
-        waveButton = GameObject.Find("ModeWave"),
-        targetButton = GameObject.Find("ModeTarget");
+        spawnLine = GameResources.s_Instance._SpawnLine.gameObject,
+        waveButton = GameObject.Find("MainMenu").transform.GetChild(1).gameObject,
+        targetButton = GameObject.Find("MainMenu").transform.GetChild(2).gameObject;
     waveButton.GetComponent<MeshRenderer>().material.color = GameObject.Find("Stone").GetComponent<MeshRenderer>().material.color * 1.5f;
     targetButton.GetComponent<MeshRenderer>().material.color = GameObject.Find("Stone").GetComponent<MeshRenderer>().material.color * 1.5f;
     switch (newMode)
     {
       case GameMode.TARGETS:
         barrier.transform.position = new Vector3(250f, 0f, 0f);
-        spawnLine.transform.position = new Vector3(250f, 0f, 0f);
+        //spawnLine.transform.position = new Vector3(250f, 0f, 0f);
         targetButton.GetComponent<MeshRenderer>().material.color = GameObject.Find("Play").GetComponent<MeshRenderer>().material.color;
         break;
       case GameMode.WAVES:
         barrier.transform.position = new Vector3(26.8f, -5.5f, 0f);
-        spawnLine.transform.position = new Vector3(62.1f, -3.1f, 0f);
+        //spawnLine.transform.position = new Vector3(62.1f, -3.1f, 0f);
         waveButton.GetComponent<MeshRenderer>().material.color = GameObject.Find("Play").GetComponent<MeshRenderer>().material.color;
         break;
     }

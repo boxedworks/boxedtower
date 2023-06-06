@@ -5,7 +5,7 @@ using UnityEngine;
 public class PlayerScript : MonoBehaviour
 {
 
-  public static PlayerScript _Player;
+  public static PlayerScript s_Singleton;
 
   GameObject _indicator, _fingerPos, _indicator2, _indicatorArrow, _arrow, _fingerPos2, _tower, _crystal;
 
@@ -33,7 +33,7 @@ public class PlayerScript : MonoBehaviour
   // Use this for initialization
   void Start()
   {
-    _Player = this;
+    s_Singleton = this;
 
     _indicator = transform.GetChild(1).gameObject;
     _fingerPos = transform.GetChild(2).gameObject;
@@ -62,7 +62,7 @@ public class PlayerScript : MonoBehaviour
   {
     UpdateCoinUI();
     UIUpdateAmmoCounter();
-    _Player.UIResetFinger();
+    s_Singleton.UIResetFinger();
   }
 
   float yAdd;
@@ -74,7 +74,7 @@ public class PlayerScript : MonoBehaviour
     _crystal.transform.position += ((_tower.transform.position + new Vector3(0f, -0.5f, 0f)) - _crystal.transform.position) * Time.deltaTime * 2f;
 
     if (!GameScript.StateAtPlay()) return;
-    
+
     // Increment ammo timer
     if (_ammo < _maxAmmo)
     {
@@ -101,32 +101,95 @@ public class PlayerScript : MonoBehaviour
 
   }
 
-
-
+  //
   public static void GiveAmmo()
   {
-    _Player._ammo++;
-    _Player._ammoTimer = _Player._ammoTime;
+    s_Singleton._ammo++;
+    s_Singleton._ammoTimer = s_Singleton._ammoTime;
     UIUpdateAmmoCounter();
   }
 
   public static int GetAmmo()
   {
-    return _Player._ammo;
+    return s_Singleton._ammo;
   }
 
   public static void GiveCoins(int numCoins)
   {
-    _Player._coins += numCoins;
+    s_Singleton._coins += numCoins;
     WaveStats._coinsGained += numCoins;
     UpdateCoinUI();
   }
 
   static void UpdateCoinUI()
   {
-    MenuManager._coin.transform.parent.GetChild(1).GetComponent<TextMesh>().text = "x " + _Player._coins;
+    MenuManager._coin.transform.parent.GetChild(1).GetComponent<TextMesh>().text = "x" + s_Singleton._coins;
   }
 
+  // Combine upgrades
+  // Upgrades
+  public bool _upgradeEnabled_triShot { get { return Shop.UpgradeEnabled(Shop.UpgradeType.TRI_SHOT); } }
+  public bool _upgradeEnabled_arrowRain { get { return Shop.UpgradeEnabled(Shop.UpgradeType.ARROW_RAIN); } }
+  Shop.UpgradeType _upgrade0, _upgrade1;
+  public bool RegisterUpgrade(Shop.UpgradeType upgradeType)
+  {
+
+    if (_upgrade0 != Shop.UpgradeType.NONE && _upgrade1 != Shop.UpgradeType.NONE)
+      return false;
+
+    if (_upgrade0 == Shop.UpgradeType.NONE)
+      _upgrade0 = upgradeType;
+    else
+      _upgrade1 = upgradeType;
+
+    return true;
+  }
+
+  public void UnregisterUpgrade(Shop.UpgradeType upgradeType, bool purposeful = false)
+  {
+
+    if (_upgrade0 == Shop.UpgradeType.NONE && _upgrade1 == Shop.UpgradeType.NONE)
+      return;
+
+    if (_upgrade0 != Shop.UpgradeType.NONE)
+    {
+      _upgrade0 = Shop.UpgradeType.NONE;
+      if (purposeful && _upgrade1 != Shop.UpgradeType.NONE)
+      {
+        _upgrade0 = _upgrade1;
+        _upgrade1 = Shop.UpgradeType.NONE;
+      }
+    }
+    else
+      _upgrade1 = Shop.UpgradeType.NONE;
+  }
+
+  public void ResetUpgrades()
+  {
+    if (_upgrade0 != Shop.UpgradeType.NONE)
+      Shop.ResetUpgrade(_upgrade0);
+    if (_upgrade1 != Shop.UpgradeType.NONE)
+      Shop.ResetUpgrade(_upgrade1);
+
+    _upgrade0 = _upgrade1 = Shop.UpgradeType.NONE;
+  }
+  public void ResetUpgrade(Shop.UpgradeType upgradeType)
+  {
+
+    if (_upgrade0 == upgradeType)
+      _upgrade0 = Shop.UpgradeType.NONE;
+    if (_upgrade1 == upgradeType)
+      _upgrade1 = Shop.UpgradeType.NONE;
+
+    Shop.ResetUpgrade(upgradeType);
+  }
+
+  public int GetUpgradeOrder(Shop.UpgradeType upgradeType)
+  {
+    return _upgrade0 == upgradeType ? 0 : _upgrade1 == upgradeType ? 1 : -1;
+  }
+
+  // On mouse move
   public void MouseMove()
   {
     if (Time.time - MenuManager.s_waveStart < 0.25f) return;
@@ -164,13 +227,14 @@ public class PlayerScript : MonoBehaviour
     _indicator2.transform.position = new Vector3(_indicator2.transform.position.x, _indicator2.transform.position.y, -5f);
 
     // Update Tower UI
-    indicatorLength = Mathf.Clamp(indicatorLength, 0f, (6.3f + Shop.GetUpgradeCount(Shop.UpgradeType.ARROW_STRENGTH) * 0.85f) * (Time.time - _downTime > 2f ? 1.45f : 1f));
+    var offset = new Vector2(-3.6f, 0.3f);
+    indicatorLength = Mathf.Clamp(indicatorLength, 0f, (6.3f + Shop.GetUpgradeCount(Shop.UpgradeType.ARROW_STRENGTH) * 0.45f) * (Time.time - _downTime > 2f ? 1.45f : 1f));
 
     _indicator.transform.localScale = new Vector3(indicatorLength, 1f, 0.25f);
-    _indicator.transform.LookAt(transform.position + new Vector3(dist.x, dist.y, transform.position.z), new Vector3(0f, 0f, 1f));
+    _indicator.transform.LookAt(_indicator.transform.position + new Vector3(dist.x, dist.y, transform.position.z), new Vector3(0f, 0f, 1f));
     _indicator.transform.Rotate(new Vector3(0f, 90f, 0f));
     _indicator.transform.localPosition = -_indicator.transform.right * indicatorLength / 2f;
-    _indicator.transform.position = new Vector3(_indicator.transform.position.x, _indicator.transform.position.y, -5f);
+    _indicator.transform.position = new Vector3(_indicator.transform.position.x + offset.x, _indicator.transform.position.y + offset.y, -5f);
 
     _indicatorArrow.transform.localPosition = _indicator.transform.localPosition + -_indicator.transform.right * (indicatorLength / 2f + 1f);
     _indicatorArrow.transform.position = new Vector3(_indicatorArrow.transform.position.x, _indicatorArrow.transform.position.y, -5f);
@@ -242,12 +306,12 @@ public class PlayerScript : MonoBehaviour
 
   static public void ButtonNoise()
   {
-    GameScript.PlaySound(_Player._sPowerOn);
+    GameScript.PlaySound(s_Singleton._sPowerOn);
   }
 
   public static void SetAmmoForShop()
   {
-    _Player._ammo = _Player._maxAmmo;
+    s_Singleton._ammo = s_Singleton._maxAmmo;
     UIUpdateAmmoCounter();
   }
 
@@ -268,15 +332,21 @@ public class PlayerScript : MonoBehaviour
     {
       var shots = 1;
 
-      var shotGunEnabled = Shop.UpgradeEnabled(Shop.UpgradeType.TRI_SHOT);
-      if (shotGunEnabled)
+      // Check trishot
+      if (_upgradeEnabled_triShot && GetUpgradeOrder(Shop.UpgradeType.TRI_SHOT_COUNTER) == 0)
       {
         shots *= (Shop.GetUpgradeCount(Shop.UpgradeType.TRI_SHOT) == 1 ? 3 : 5);
-        Shop.ResetUpgrade(Shop.UpgradeType.TRI_SHOT);
+        ResetUpgrade(Shop.UpgradeType.TRI_SHOT_COUNTER);
       }
 
       // Shooooot
       Shoot(shots);
+
+      // Reset upgrades
+      if (_upgradeEnabled_arrowRain)
+      {
+        ResetUpgrade(Shop.UpgradeType.ARROW_RAIN_COUNTER);
+      }
     }
     else
     {
@@ -307,35 +377,42 @@ public class PlayerScript : MonoBehaviour
     _fingerPos2.transform.localPosition = new Vector3(-50f, 0f, -5f);
   }
 
-  static void UIUpdateAmmoCounter()
+  public static void UIUpdateAmmoCounter()
   {
     // Update UI
     for (var i = 0; i < 5; i++)
     {
       var ui = GameObject.Find("AmmoArrow" + i).GetComponent<MeshRenderer>();
-      ui.enabled = (i < _Player._ammo ? true : false);
+      var val = (i < s_Singleton._ammo ? true : false);
+      if (ui.enabled != val)
+        ui.enabled = val;
     }
   }
 
   IEnumerator LoseHealth()
   {
     GameScript.PlaySound(_sTowerMove);
-    float timer = 1f;
     ParticleSystem s = GameObject.Find("TowerSmoke").GetComponent<ParticleSystem>();
     s.Play();
+
     GameScript.SpawnExplosion(GameObject.Find("Explod").transform.position + new Vector3(-1.5f + Random.value * 2f, -0.5f + Random.value * 1f, 0f));
-    int eI = 0;
+    GameScript.ShakeHeavy();
+
+    var eI = 0;
+    var timer = 1f;
     while (timer > 0f)
     {
       timer -= 0.05f;
       yield return new WaitForSeconds(0.05f);
-      Vector3 movePos = new Vector3(0f, 0.2f, 0f);
+      var movePos = new Vector3(0f, 0.2f, 0f);
       _tower.transform.position -= movePos;
       transform.position -= movePos;
 
       if (++eI == 5)
       {
         GameScript.SpawnExplosion(GameObject.Find("Explod").transform.position + new Vector3(-4f + Random.value * 5f, -2f + Random.value * 5f, 0f));
+        GameScript.ShakeHeavy();
+
         eI = 0;
       }
     }
@@ -402,48 +479,50 @@ public class PlayerScript : MonoBehaviour
       {
         addPos.y = -20f;
       }
+
+      // Shoooooot
       var ar = Shoot((InputManager._MouseDownPos - InputManager._MouseUpPos + addPos), _indicator.transform.localScale.x * 200f);
-      //if (_arrowRain)
-      //  ar.GetComponent<ArrowScript>()._isArrowRain = true;
       arrows.Add(ar);
       WaveStats._arrowsShot++;
     }
 
-    foreach (var arrow in arrows)
-      foreach (var otherArrow in arrows)
-      {
-        if (arrow.GetInstanceID() == otherArrow.GetInstanceID()) continue;
-        Physics2D.IgnoreCollision(arrow.transform.GetChild(4).GetComponent<Collider2D>(), otherArrow.transform.GetChild(4).GetComponent<Collider2D>());
-      }
-
     UIUpdateAmmoCounter();
   }
 
-  static public IEnumerator ArrowRainCo(float x)
+  static public IEnumerator ArrowRainCo(float x, List<Shop.UpgradeType> upgradeModifiers)
   {
     var numArrows = 10 + (Shop.GetUpgradeCount(Shop.UpgradeType.ARROW_RAIN) - 1) * 5;
     for (var i = 0; i < numArrows; i++)
     {
 
       // Spawn arrow in the air
-      var arrow = _Player.SpawnArrow();
-      arrow.transform.position = new Vector3(-30f + x + i * 1.25f, 25f, 0f);
+      var subArrows = 1;
+      if (upgradeModifiers.Contains(Shop.UpgradeType.TRI_SHOT))
+      {
+        subArrows *= 3;//Shop.GetUpgradeCount(Shop.UpgradeType.TRI_SHOT) == 1 ? 3 : 5;
+      }
+      for (var u = 0; u < subArrows; u++)
+      {
+        var arrow = s_Singleton.SpawnArrow();
+        arrow.transform.position = new Vector3(-31f + x + i * 1.25f, 30f, 0f);
 
-      // Fire!
-      var rb = arrow.GetComponent<Rigidbody2D>();
-      rb.isKinematic = false;
-      rb.AddForce(new Vector3(1f, 0f) * 1150f);
+        // Fire!
+        var rb = arrow.GetComponent<Rigidbody2D>();
+        rb.isKinematic = false;
+        rb.AddForce(new Vector3(u == 0 ? 1f : u == 1 ? 0.6f : 1.4f, 0f) * 1150f);
 
-      arrow.Init();
-      arrow.Fired();
+        arrow.Init();
+        arrow.Fired();
+      }
 
       yield return new WaitForSeconds(0.1f);
     }
   }
 
-  static public void ArrowRain(float x)
+  static public void ArrowRain(float x, List<Shop.UpgradeType> upgradeModifiers)
   {
-    _Player.StartCoroutine(ArrowRainCo(x));
+    Debug.Log("Arrow rain");
+    s_Singleton.StartCoroutine(ArrowRainCo(x, upgradeModifiers));
   }
 
   GameObject Shoot(Vector2 dir, float force)
@@ -456,7 +535,7 @@ public class PlayerScript : MonoBehaviour
 
     // Spawn arrow
     var arrow = SpawnArrow();
-    arrow.transform.position = transform.position;
+    arrow.transform.position = transform.GetChild(0).position;
 
     // Fire!
     arrow.GetComponent<Rigidbody2D>().bodyType = RigidbodyType2D.Dynamic;
@@ -467,12 +546,18 @@ public class PlayerScript : MonoBehaviour
     //if (_pierce)
     //  arrow.GetComponent<ArrowScript>().ActivatePierce();
 
-    // Check arrow rain
-    var arrowRainEnabled = Shop.UpgradeEnabled(Shop.UpgradeType.ARROW_RAIN);
-    if (arrowRainEnabled)
+    // Add tri shot
+    if (GetUpgradeOrder(Shop.UpgradeType.ARROW_RAIN_COUNTER) != -1)
     {
-      arrow._isArrowRain = true;
-      Shop.ResetUpgrade(Shop.UpgradeType.ARROW_RAIN);
+      Debug.Log("Added arrow rain");
+      arrow.RegisterUpgrade(Shop.UpgradeType.ARROW_RAIN);
+    }
+
+    // Add tri shot
+    if (GetUpgradeOrder(Shop.UpgradeType.TRI_SHOT_COUNTER) == 1)
+    {
+      arrow.RegisterUpgrade(Shop.UpgradeType.TRI_SHOT);
+      ResetUpgrade(Shop.UpgradeType.TRI_SHOT_COUNTER);
     }
 
     // Apply force
@@ -487,45 +572,34 @@ public class PlayerScript : MonoBehaviour
   ArrowScript SpawnArrow()
   {
     // Spawn arrow
-    var arrow = Instantiate(_arrow);
+    var arrow = Instantiate(_arrow, GameResources.s_Instance._Arrows);
     arrow.name = "Arrow";
-    var barrier = GameObject.Find("BarrierMod");
-    var c = arrow.transform.GetChild(4).GetComponent<Collider2D>();
-    for (var i = 0; i < 2; i++)
-    {
-      Physics2D.IgnoreCollision(c, barrier.transform.GetChild(i).GetComponent<Collider2D>());
-    }
-    var arrows = GameObject.Find("Arrows");
-    for (var i = 0; i < arrows.transform.childCount; i++)
-    {
-      Physics2D.IgnoreCollision(c, arrows.transform.GetChild(i).GetChild(4).GetComponent<Collider2D>());
-    }
-    arrow.transform.parent = arrows.transform;
+
     return arrow.GetComponent<ArrowScript>();
   }
 
   public static int GetCoins()
   {
-    return _Player._coins;
+    return s_Singleton._coins;
   }
 
   public static void SetCoins(int coins)
   {
-    _Player._coins = coins;
+    s_Singleton._coins = coins;
     UpdateCoinUI();
   }
 
   public static void ReduceCoins(int number)
   {
-    _Player._coins -= number;
+    s_Singleton._coins -= number;
     UpdateCoinUI();
   }
 
   public static void AddHealth()
   {
-    _Player._health++;
-    _Player.StartCoroutine(_Player.GainHealth());
-    if (_Player._health > 1)
+    s_Singleton._health++;
+    s_Singleton.StartCoroutine(s_Singleton.GainHealth());
+    if (s_Singleton._health > 1)
     {
       ToggleFire(false);
     }
@@ -550,16 +624,16 @@ public class PlayerScript : MonoBehaviour
 
   public static void AddAmmo()
   {
-    _Player._maxAmmo++;
-    _Player._ammo = _Player._maxAmmo;
+    s_Singleton._maxAmmo++;
+    s_Singleton._ammo = s_Singleton._maxAmmo;
     UIUpdateAmmoCounter();
   }
 
   public static void RemoveHealth()
   {
-    _Player._health--;
-    _Player.StartCoroutine(_Player.LoseHealth());
-    if (_Player._health < 2)
+    s_Singleton._health--;
+    s_Singleton.StartCoroutine(s_Singleton.LoseHealth());
+    if (s_Singleton._health < 2)
     {
       ToggleFire(true);
     }
@@ -567,38 +641,38 @@ public class PlayerScript : MonoBehaviour
 
   public static int GetHealth()
   {
-    return _Player._health;
+    return s_Singleton._health;
   }
 
   public static int GetAmmoMax()
   {
-    return _Player._maxAmmo;
+    return s_Singleton._maxAmmo;
   }
 
   public static void SetAmmoMax(int ammo)
   {
-    _Player._maxAmmo = ammo;
+    s_Singleton._maxAmmo = ammo;
 
     // Change arrow replenishment speed
     switch (ammo)
     {
       case 3:
-        _Player._ammoTime = 1.3f;
+        s_Singleton._ammoTime = 1.3f;
         break;
       case 4:
-        _Player._ammoTime = 1.1f;
+        s_Singleton._ammoTime = 1.1f;
         break;
       case 5:
-        _Player._ammoTime = 0.9f;
+        s_Singleton._ammoTime = 0.9f;
         break;
     }
   }
 
   public static void AddTarget()
   {
-    _Player._targetNumber++;
-    MenuManager.SetWaveSign($"{_Player._targetNumber + 1}");
-    switch (_Player._targetNumber)
+    s_Singleton._targetNumber++;
+    MenuManager.SetWaveSign($"{s_Singleton._targetNumber + 1}");
+    switch (s_Singleton._targetNumber)
     {
       case 2:
         GameScript.Targets._Difficulty++;
@@ -606,7 +680,7 @@ public class PlayerScript : MonoBehaviour
       case 3:
         GameScript.Targets._Difficulty++;
         // Play music
-        AudioSource s = GameScript._Game.GetComponent<AudioSource>();
+        AudioSource s = GameScript.s_Instance.GetComponent<AudioSource>();
         if (!s.isPlaying)
         {
           s.Play();
@@ -650,11 +724,11 @@ public class PlayerScript : MonoBehaviour
 
   public static void ResetTarget()
   {
-    _Player._targetNumber = 0;
+    s_Singleton._targetNumber = 0;
   }
 
   public static int GetTarget()
   {
-    return _Player._targetNumber;
+    return s_Singleton._targetNumber;
   }
 }

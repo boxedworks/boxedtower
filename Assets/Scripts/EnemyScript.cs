@@ -8,6 +8,7 @@ public class EnemyScript : MonoBehaviour
 
   Rigidbody2D _rb;
 
+  int _flag;
 
   public bool _IsDead, _CanDropLoot;
 
@@ -45,7 +46,9 @@ public class EnemyScript : MonoBehaviour
   }
 
   // Use this for initialization
-  float _pitchSave, _forceModSave, _spawnTime;
+  float _pitchSave, _forceModSave, _spawnTime, _restTime;
+  [System.NonSerialized]
+  public bool _IsSlide;
   void Start()
   {
     Init();
@@ -69,9 +72,27 @@ public class EnemyScript : MonoBehaviour
       Debug.LogWarning("No sensors on enemy type: " + _EnemyType);
     }
 
+    // Check slide
+    if (
+      _EnemyType == EnemyType.GROUND_SLIDE_SMALL ||
+      _EnemyType == EnemyType.GROUND_SLIDE_MEDIUM ||
+      _EnemyType == EnemyType.GROUND_SLIDE ||
+      _EnemyType == EnemyType.GROUND_SLIDE_TOP ||
+      _EnemyType == EnemyType.GROUND_SLIDE_CASTLE ||
+      _EnemyType == EnemyType.GROUND_TOTEM_5
+    )
+    {
+      _IsSlide = true;
+    }
+
+    // Check floating
+    if(_EnemyType == EnemyType.GROUND_POP_FLOAT){
+      _flag = Random.Range(0, 10);
+    }
+
     /*if(_type == EnemyType.BOSS)
     {
-        GameObject barrier = GameObject.Find("SpawnLine");
+        GameObject barrier = GameResources.s_Instance._SpawnLine.gameObject;
         Physics.IgnoreCollision(barrier.transform.GetChild(0).GetComponent<Collider>(), transform.GetChild(0).GetComponent<Collider>());
         Physics.IgnoreCollision(barrier.transform.GetChild(0).GetComponent<Collider>(), transform.GetChild(1).GetComponent<Collider>());
     }*/
@@ -85,7 +106,7 @@ public class EnemyScript : MonoBehaviour
 
   void Update()
   {
-    /*if (_EnemyType == EnemyType.GROUND_SLIDE || _EnemyType == EnemyType.GROUND_SLIDE_MEDIUM || _EnemyType == EnemyType.GROUND_SLIDE_SMALL || _EnemyType == EnemyType.GROUND_SLIDE_TOP)
+    /*if (_isSlide)
     {
       _EnemyNoise.pitch = Time.timeScale;
     }*/
@@ -95,6 +116,8 @@ public class EnemyScript : MonoBehaviour
       Die(false);
     }
 
+    if (_IsSlide) return;
+
     // Make sure not flying towards player very quickly
     if (_rb.velocity.x < -8f)
     {
@@ -102,10 +125,15 @@ public class EnemyScript : MonoBehaviour
     }
 
     // Make sure not stuck
-    if (transform.position.x > GameResources.s_Instance._SpawnLine.GetChild(0).position.x)
+    if (_rb.angularVelocity < 20f)
     {
-      if (Time.time - _spawnTime > 15f)
-        _ForceModifier = _forceModSave + (Time.time - _spawnTime - 15f) * 0.1f;
+      _restTime += Time.deltaTime;
+    }
+    else
+      _restTime = 0f;
+    if (_restTime > 5f)
+    {
+      _ForceModifier = _forceModSave + (_restTime - 5f) * 0.01f;
     }
     else
     {
@@ -174,7 +202,7 @@ public class EnemyScript : MonoBehaviour
         }
 
         // At tower
-        if (_rb.position.x < -2f)
+        if (_rb.position.x < -11f)
         {
           _rb.gravityScale = 1f;
           _rb.constraints = RigidbodyConstraints2D.None;
@@ -208,7 +236,7 @@ public class EnemyScript : MonoBehaviour
         // Else, when in air, stop movement and float towards player
         else
         {
-          if (((_rb.position.y > 5.5f && _timer < 0f) || _rb.position.y > 7.5f))
+          if (_rb.position.y > 5.5f + _flag * 0.25f)
           {
             _rb.gravityScale = 0f;
             _rb.velocity = new Vector3(_rb.velocity.x, 0f, 0f);
@@ -235,7 +263,7 @@ public class EnemyScript : MonoBehaviour
         _rb.MovePosition(transform.position + new Vector3(-1f, 0f, 0f) * Time.fixedDeltaTime);
         if (transform.position.x < -6f)
         {
-          PlayerScript._Player.Hit();
+          PlayerScript.s_Singleton.Hit();
           Die(false);
         }
         break;
@@ -243,7 +271,7 @@ public class EnemyScript : MonoBehaviour
         _rb.MovePosition(transform.position + new Vector3(-1f, 0f, 0f) * Time.fixedDeltaTime);
         if (transform.position.x < -6f)
         {
-          PlayerScript._Player.Hit();
+          PlayerScript.s_Singleton.Hit();
           Die(false);
         }
         break;
@@ -251,7 +279,7 @@ public class EnemyScript : MonoBehaviour
         _rb.MovePosition(transform.position + new Vector3(-1f, 0f, 0f) * Time.fixedDeltaTime);
         if (transform.position.x < -6f)
         {
-          PlayerScript._Player.Hit();
+          PlayerScript.s_Singleton.Hit();
           Die(false);
         }
         break;
@@ -259,7 +287,7 @@ public class EnemyScript : MonoBehaviour
         _rb.MovePosition(transform.position + new Vector3(-1f, 0f, 0f) * Time.fixedDeltaTime);
         if (transform.position.x < -6f)
         {
-          PlayerScript._Player.Hit();
+          PlayerScript.s_Singleton.Hit();
           Die(false);
         }
         break;
@@ -267,7 +295,7 @@ public class EnemyScript : MonoBehaviour
         _rb.MovePosition(transform.position + new Vector3(-1f, 0f, 0f) * Time.fixedDeltaTime);
         if (transform.position.x < -6f)
         {
-          PlayerScript._Player.Hit();
+          PlayerScript.s_Singleton.Hit();
           Die(false);
         }
         break;
@@ -275,12 +303,12 @@ public class EnemyScript : MonoBehaviour
         _rb.MovePosition(transform.position + new Vector3(-1f, 0f, 0f) * Time.fixedDeltaTime);
         if (transform.position.x < -6f)
         {
-          PlayerScript._Player.Hit();
+          PlayerScript.s_Singleton.Hit();
           Die(false);
         }
         break;
       case (EnemyType.FLYING_HOMING):
-        if (Vector3.Distance(PlayerScript._Player.transform.position, transform.position) > 50f)
+        if (Vector3.Distance(PlayerScript.s_Singleton.transform.position, transform.position) > 50f)
         {
           _rb.AddForce(new Vector3(-1f, 0f, 0f) * 15);
           break;
@@ -298,7 +326,7 @@ public class EnemyScript : MonoBehaviour
         else if (_timer < 0f)
         {
           // Find direction to player
-          Vector3 dir = (PlayerScript._Player.transform.position - transform.position);
+          Vector3 dir = (PlayerScript.s_Singleton.transform.position - transform.position);
           _rb.AddForce(dir.normalized * 10f);
         }
         break;
@@ -322,7 +350,7 @@ public class EnemyScript : MonoBehaviour
             r.material.color = Color.black;
 
             // Check towers
-            if (_EnemyType == EnemyType.GROUND_SLIDE || _EnemyType == EnemyType.GROUND_SLIDE_SMALL || _EnemyType == EnemyType.GROUND_SLIDE_MEDIUM || _EnemyType == EnemyType.GROUND_SLIDE_TOP || _EnemyType == EnemyType.GROUND_SLIDE_CASTLE)
+            if (_IsSlide)
             {
 
               // Explosion FX
@@ -443,10 +471,8 @@ public class EnemyScript : MonoBehaviour
     var t = 70f;
     rb.AddTorque(new Vector3(Random.Range(-t, t), Random.Range(-t, t), Random.Range(-t, t)));*/
 
-    var istower = false;
-    if (_EnemyType == EnemyType.GROUND_SLIDE || _EnemyType == EnemyType.GROUND_SLIDE_SMALL || _EnemyType == EnemyType.GROUND_SLIDE_MEDIUM || _EnemyType == EnemyType.GROUND_SLIDE_TOP || _EnemyType == EnemyType.GROUND_SLIDE_CASTLE)
+    if (_IsSlide)
     {
-      istower = true;
       _rb.bodyType = RigidbodyType2D.Dynamic;
     }
     else
@@ -465,7 +491,7 @@ public class EnemyScript : MonoBehaviour
     }
 
     _rb.AddForce(new Vector2(30f, 300f) * _rb.mass);
-    if (!istower)
+    if (!_IsSlide)
       _rb.AddTorque(-_rb.mass * 300f);
 
     // Drop gold
@@ -496,15 +522,17 @@ public class EnemyScript : MonoBehaviour
         Die();
         return;
       }
-      PlayerScript._Player.Hit();
+      PlayerScript.s_Singleton.Hit();
       if (GameScript.StateAtPlay()) Die(false);
     }
+
     if (c.gameObject.name.Equals("Arrow")) return;
+
     if (c.gameObject.name.Equals("Ground"))
     {
-      if (_EnemyNoise != null && _EnemyType != EnemyType.GROUND_POP && _EnemyType != EnemyType.GROUND_POP_FLOAT && _EnemyType != EnemyType.GROUND_SLIDE && _EnemyType != EnemyType.GROUND_SLIDE_MEDIUM && _EnemyType != EnemyType.GROUND_SLIDE_SMALL && _EnemyType != EnemyType.GROUND_TOTEM_5)
+      if (_EnemyNoise != null && !_IsSlide)
       {
-        if (Time.time - _enemyNoiseLast < 0.4f)
+        if (Time.time - _enemyNoiseLast > 0.15f)
         {
           _enemyNoiseLast = Time.time;
           _EnemyNoise.Play();
@@ -512,6 +540,7 @@ public class EnemyScript : MonoBehaviour
       }
       return;
     }
+
     _rb.AddForce(new Vector2(0f, 1f) * 100f * _rb.mass);
   }
 
@@ -598,7 +627,7 @@ public class EnemyScript : MonoBehaviour
 
     enemy.name = enemyName;
     enemy.transform.parent = GameObject.Find("Alive").transform;
-    enemy.transform.position = (spawnPos == Vector3.zero ? new Vector3(58f + Random.Range(-1f, 1f), 17f + Random.Range(0f, 2f), 0f) : spawnPos);
+    enemy.transform.position = (spawnPos == Vector3.zero ? new Vector3(GameResources.s_Instance._SpawnLine.position.x - 8f + Random.Range(-1f, 1f), 17f + Random.Range(0f, 2f), 0f) : spawnPos);
     var script = enemy.GetComponent<EnemyScript>();
 
     // Init enemy script
@@ -668,7 +697,7 @@ public class EnemyScript : MonoBehaviour
         numCoins = 50;
         break;
       case (EnemyType.CRATE):
-        numCoins = 100;
+        numCoins = 75;
         break;
     }
 

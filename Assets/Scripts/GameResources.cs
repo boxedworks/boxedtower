@@ -8,7 +8,7 @@ public class GameResources
   //
   public Camera _CameraMain;
 
-  public Transform _Sun, _SpawnLine, _ContainerDead;
+  public Transform _Sun, _Sky, _SpawnLine, _ContainerDead, _Arrows;
 
   public ParticleSystem _ParticlesCoins;
 
@@ -26,8 +26,10 @@ public class GameResources
     _CameraMain = Camera.main;
 
     _Sun = GameObject.Find("Sun").transform;
+    _Sky = GameObject.Find("Sky").transform;
     _SpawnLine = GameObject.Find("SpawnLine").transform;
     _ContainerDead = GameObject.Find("Dead").transform;
+    _ContainerDead = GameObject.Find("Arrows").transform;
 
     _ParticlesCoins = GameObject.Find("CoinSystem").GetComponent<ParticleSystem>();
 

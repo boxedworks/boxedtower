@@ -48,16 +48,16 @@ public class InputManager : MonoBehaviour
 
   static void Down()
   {
-    PlayerScript._Player.MouseDown();
+    PlayerScript.s_Singleton.MouseDown();
   }
 
   static void Moved()
   {
-    PlayerScript._Player.MouseMove();
+    PlayerScript.s_Singleton.MouseMove();
   }
 
   static void Up()
   {
-    PlayerScript._Player.MouseUp();
+    PlayerScript.s_Singleton.MouseUp();
   }
 }

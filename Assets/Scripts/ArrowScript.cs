@@ -9,13 +9,13 @@ public class ArrowScript : MonoBehaviour
 
   Rigidbody2D _rb;
 
-  public bool _isArrowRain;
+  List<Shop.UpgradeType> _upgradeModifiers;
 
   // Use this for initialization
   public Transform[] _children;
   void Start()
   {
-    Init();
+    //Init();
   }
 
   public void Init()
@@ -29,24 +29,32 @@ public class ArrowScript : MonoBehaviour
     _sAirNoise = transform.GetChild(3).GetChild(4).GetComponent<AudioSource>();
 
     _rb = GetComponent<Rigidbody2D>();
+
+    _upgradeModifiers = new List<Shop.UpgradeType>();
   }
 
   // Update is called once per frame
   void Update()
   {
     if (_rb == null || _rb.velocity == Vector2.zero) return;
-    Vector3 vel = _rb.velocity;
+    var vel = _rb.velocity;
     transform.rotation = Quaternion.LookRotation(vel, new Vector3(0f, 0f, 1f));
     transform.Rotate(new Vector3(0f, 90f, 0f));
 
-    _sAirNoise.pitch = (1f + _rb.velocity.magnitude / 15f) * Time.timeScale;
+    _sAirNoise.pitch = (1f + _rb.velocity.magnitude / 15f);// * Time.timeScale;
 
-    if (transform.localPosition.x > 45.2f || transform.localPosition.x < -18f || transform.localPosition.y > 30f || transform.localPosition.y < -14f)
+    if (transform.localPosition.x > 52.2f || transform.localPosition.x < -22.4f || transform.localPosition.y > 100f || transform.localPosition.y < -30f)
     {
       _children[0].parent = GameResources.s_Instance._ContainerDead;
       _children[1].parent = GameResources.s_Instance._ContainerDead;
       Destroy(gameObject);
     }
+  }
+
+  //
+  public void RegisterUpgrade(Shop.UpgradeType upgradeType)
+  {
+    _upgradeModifiers.Add(upgradeType);
   }
 
   // Pirce
@@ -164,10 +172,13 @@ public class ArrowScript : MonoBehaviour
     _children[0].parent = GameResources.s_Instance._ContainerDead;
     _children[1].parent = GameResources.s_Instance._ContainerDead;
 
-    // Check if powerup
-    if (_isArrowRain)
+    // Check powerup
+    Debug.Log("Mods: ");
+    foreach (var u in _upgradeModifiers)
+      Debug.Log(u);
+    if (_upgradeModifiers.Contains(Shop.UpgradeType.ARROW_RAIN))
     {
-      PlayerScript.ArrowRain(transform.position.x);
+      PlayerScript.ArrowRain(transform.position.x, _upgradeModifiers);
     }
 
     // Destroy script
