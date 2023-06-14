@@ -110,11 +110,14 @@ static public class Shop
       switch (upgradeType)
       {
 
+        case UpgradeType.ARROW_PENETRATION:
+          return 15;
+
         case UpgradeType.TRI_SHOT_COUNTER:
           return 10;
 
         case UpgradeType.ARROW_RAIN_COUNTER:
-          return 25;
+          return 30;
 
         default:
           return 0;
@@ -127,6 +130,11 @@ static public class Shop
     {
       switch (upgradeType)
       {
+
+        case UpgradeType.ARROW_PENETRATION:
+          return 2;
+        case UpgradeType.ARROW_PENETRATION_COUNTER:
+          return 2;
 
         case UpgradeType.TRI_SHOT:
           return 2;
@@ -288,6 +296,7 @@ static public class Shop
     // Active upgrades
     UpdateNormalUpgrade(UpgradeType.TRI_SHOT, UpgradeType.TRI_SHOT_COUNTER);
     UpdateNormalUpgrade(UpgradeType.ARROW_RAIN, UpgradeType.ARROW_RAIN_COUNTER);
+    UpdateNormalUpgrade(UpgradeType.ARROW_PENETRATION, UpgradeType.ARROW_PENETRATION_COUNTER);
 
     // Shoot strength
     UpdateUpgrade(UpgradeType.ARROW_STRENGTH, UpdateFunction_CountPlusOnPurchase);
@@ -427,15 +436,18 @@ static public class Shop
     switch (upgradeType)
     {
 
+      case UpgradeType.ARROW_PENETRATION:
+        return count == 0 ? "<b>Unlock:</b>\n<size=45>Pen-Shot</size>" : "<b>Upgrade:</b>\n<size=45>+Pen-Shot size</size>";
+      case UpgradeType.ARROW_PENETRATION_COUNTER:
+        return "<b>Upgrade:</b>\n<size=45>Pen-Shot cooldown</size>";
+
       case UpgradeType.TRI_SHOT:
         return count == 0 ? "<b>Unlock:</b>\n<size=45>Tri-Shot</size>" : "<b>Upgrade:</b>\n<size=45>+2 Tri-Shot arrows</size>";
-
       case UpgradeType.TRI_SHOT_COUNTER:
         return "<b>Upgrade:</b>\n<size=45>Tri-Shot cooldown</size>";
 
       case UpgradeType.ARROW_RAIN:
         return count == 0 ? "<b>Unlock:</b>\n<size=45>Arrow Rain</size>" : "<b>Upgrade:</b>\n<size=45>+5 Arrow Rain arrows</size>";
-
       case UpgradeType.ARROW_RAIN_COUNTER:
         return "<b>Upgrade:</b>\n<size=45>Arrow Rain cooldown</size>";
 

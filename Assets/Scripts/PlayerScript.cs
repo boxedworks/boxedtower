@@ -130,9 +130,13 @@ public class PlayerScript : MonoBehaviour
   // Upgrades
   public bool _upgradeEnabled_triShot { get { return Shop.UpgradeEnabled(Shop.UpgradeType.TRI_SHOT); } }
   public bool _upgradeEnabled_arrowRain { get { return Shop.UpgradeEnabled(Shop.UpgradeType.ARROW_RAIN); } }
+  public bool _upgradeEnabled_penetratingArrow { get { return Shop.UpgradeEnabled(Shop.UpgradeType.ARROW_PENETRATION); } }
   Shop.UpgradeType _upgrade0, _upgrade1;
   public bool RegisterUpgrade(Shop.UpgradeType upgradeType)
   {
+    // Not using....
+    if (_upgrade0 != Shop.UpgradeType.NONE)
+      return false;
 
     if (_upgrade0 != Shop.UpgradeType.NONE && _upgrade1 != Shop.UpgradeType.NONE)
       return false;

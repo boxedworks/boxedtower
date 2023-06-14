@@ -259,7 +259,7 @@ public class Wave
     foreach (var enemyData in enemyPool)
     {
       var ratio = Mathf.Clamp((int)totalCost / enemyData.Value, 1, 1000);
-      Debug.LogWarning($"{enemyData.Key}: {ratio}");
+      //Debug.LogWarning($"{enemyData.Key}: {ratio}");
       for (var i = 0; i < ratio; i++)
         enemyPoolTypes.Add(enemyData.Key);
     }
@@ -618,7 +618,7 @@ public class Wave
         QueueWaves(
 
           // Points
-          235, 10,
+          250, 10,
 
           // Enemy pool
           new Dictionary<EnemyScript.EnemyType, int>(){
@@ -641,118 +641,123 @@ public class Wave
 
         break;
       case 14:
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL, 15, 2f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL_SMALL, 5, 10f);
+        QueueWaves(
 
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE_SMALL, 1, 6f);
-        AddWave(EnemyScript.EnemyType.GROUND_POP_FLOAT, 4, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL, 3, 3f);
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE_SMALL, 1, 6f);
-        AddWave(EnemyScript.EnemyType.GROUND_POP, 4, 3f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL_ARMOR_2, 2, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE_SMALL, 1, 6f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL_ARMOR_8, 1, 4f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL_SMALL, 2, 0.1f);
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE, 1, 0.1f);
-        AddWave(EnemyScript.EnemyType.GROUND_POP_FLOAT, 4, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL, 10, 9f);
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE_MEDIUM, 1, 12f);
-        AddWave(EnemyScript.EnemyType.GROUND_POP, 4, 0.1f);
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE_SMALL, 1, 0f);
+          // Points
+          270, 10,
 
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE_SMALL, 1, 6f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL, 15, 2f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL_SMALL, 5, 10f);
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE_MEDIUM, 1, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_POP_FLOAT, 4, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL_ARMOR_4, 1, 10f);
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE, 1, 0.1f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL_ARMOR_8, 1, 4f);
-        AddWave(EnemyScript.EnemyType.GROUND_POP, 4, 3f);
-        AddWave(EnemyScript.EnemyType.GROUND_POP_FLOAT, 4, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL_ARMOR_2, 2, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE_MEDIUM, 1, 10f);
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE_SMALL, 1, 6f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL, 8, 2f);
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE_SMALL, 1, 6f);
-        AddWave(EnemyScript.EnemyType.GROUND_POP, 4, 3f);
-        AddWave(EnemyScript.EnemyType.GROUND_POP_FLOAT, 4, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL_ARMOR_8, 1, 0f, true);
+          // Enemy pool
+          new Dictionary<EnemyScript.EnemyType, int>(){
+            { EnemyScript.EnemyType.GROUND_ROLL, 5 },
+            { EnemyScript.EnemyType.GROUND_ROLL_SMALL, 8 },
+            { EnemyScript.EnemyType.GROUND_POP, 10 },
+            { EnemyScript.EnemyType.GROUND_POP_FLOAT, 13 },
+            { EnemyScript.EnemyType.GROUND_ROLL_ARMOR_2, 15 },
+            { EnemyScript.EnemyType.GROUND_ROLL_ARMOR_4, 23 },
+            { EnemyScript.EnemyType.GROUND_ROLL_ARMOR_8, 30 },
+            { EnemyScript.EnemyType.GROUND_SLIDE_SMALL, 18 },
+            { EnemyScript.EnemyType.GROUND_SLIDE_MEDIUM, 25 },
+            { EnemyScript.EnemyType.GROUND_SLIDE, 35 },
+          },
+          true,
+
+          // SubWaves
+          2, 1
+        );
+
         break;
       case 15:
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL, 10, 3f);
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE_TOP, 1, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL_SMALL, 2, 23f);
+        QueueWaves(
 
-        AddWave(EnemyScript.EnemyType.GROUND_POP, 4, 3f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL, 4, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE_TOP, 1, 5f);
-        AddWave(EnemyScript.EnemyType.GROUND_POP_FLOAT, 4, 6f);
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE_MEDIUM, 1, 10f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL_ARMOR_8, 1, 3f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL_ARMOR_2, 2, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE_MEDIUM, 1, 10f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL_ARMOR_4, 1, 2f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL_SMALL, 2, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE_TOP, 1, 3f);
-        AddWave(EnemyScript.EnemyType.GROUND_POP_FLOAT, 4, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL_ARMOR_8, 1, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL, 4, 6f);
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE, 1, 2f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL, 4, 20f);
+          // Points
+          285, 10,
 
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE_SMALL, 1, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL, 10, 6f);
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE_TOP, 1, 5f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL, 5, 3f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL_ARMOR_2, 2, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_POP_FLOAT, 4, 2f);
-        AddWave(EnemyScript.EnemyType.GROUND_POP, 4, 3f);
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE, 1, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL_ARMOR_4, 2, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL_SMALL, 2, 8f);
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE_MEDIUM, 1, 3f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL_ARMOR_8, 1, 3f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL, 7, 6f);
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE_MEDIUM, 1, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL_ARMOR_2, 2, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_POP_FLOAT, 4, 2f);
-        AddWave(EnemyScript.EnemyType.GROUND_POP, 4, 7f);
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE_TOP, 1, 8f);
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE_SMALL, 1, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL, 5, 3f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL_SMALL, 2, 0f, true);
+          // Enemy pool
+          new Dictionary<EnemyScript.EnemyType, int>(){
+            { EnemyScript.EnemyType.GROUND_ROLL, 5 },
+            { EnemyScript.EnemyType.GROUND_ROLL_SMALL, 8 },
+            { EnemyScript.EnemyType.GROUND_POP, 10 },
+            { EnemyScript.EnemyType.GROUND_POP_FLOAT, 13 },
+            { EnemyScript.EnemyType.GROUND_ROLL_ARMOR_2, 15 },
+            { EnemyScript.EnemyType.GROUND_ROLL_ARMOR_4, 23 },
+            { EnemyScript.EnemyType.GROUND_ROLL_ARMOR_8, 30 },
+            { EnemyScript.EnemyType.GROUND_SLIDE_SMALL, 18 },
+            { EnemyScript.EnemyType.GROUND_SLIDE_MEDIUM, 25 },
+            { EnemyScript.EnemyType.GROUND_SLIDE, 35 },
+            { EnemyScript.EnemyType.GROUND_SLIDE_TOP, 30 },
+          },
+          true,
+
+          // SubWaves
+          3, 0
+        );
         break;
       case 16:
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE_SMALL, 1, 8f);
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE_SMALL, 1, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL, 15, 7f);
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE, 1, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL, 10, 25f);
+        QueueWaves(
 
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE_SMALL, 1, 7f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL_ARMOR_4, 1, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_POP_FLOAT, 4, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE_TOP, 1, 10f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL_ARMOR_8, 1, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL, 10, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE_MEDIUM, 1, 12f);
-        AddWave(EnemyScript.EnemyType.GROUND_POP_FLOAT, 4, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_POP, 4, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE_MEDIUM, 1, 12f);
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE_TOP, 1, 10f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL, 5, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL_ARMOR_8, 1, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE_MEDIUM, 1, 7f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL_ARMOR_2, 2, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL, 10, 5f);
-        AddWave(EnemyScript.EnemyType.GROUND_SLIDE_CASTLE, 1, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL, 10, 1f);
-        AddWave(EnemyScript.EnemyType.GROUND_ROLL_SMALL, 10, 1f);
-        AddWave(EnemyScript.EnemyType.BOSS, 1, 0f);
+          // Points
+          315, 10,
+
+          // Enemy pool
+          new Dictionary<EnemyScript.EnemyType, int>(){
+            { EnemyScript.EnemyType.GROUND_ROLL, 5 },
+            { EnemyScript.EnemyType.GROUND_ROLL_SMALL, 8 },
+            { EnemyScript.EnemyType.GROUND_POP, 10 },
+            { EnemyScript.EnemyType.GROUND_POP_FLOAT, 13 },
+            { EnemyScript.EnemyType.GROUND_ROLL_ARMOR_2, 15 },
+            { EnemyScript.EnemyType.GROUND_ROLL_ARMOR_4, 23 },
+            { EnemyScript.EnemyType.GROUND_ROLL_ARMOR_8, 30 },
+            { EnemyScript.EnemyType.GROUND_SLIDE_SMALL, 18 },
+            { EnemyScript.EnemyType.GROUND_SLIDE_MEDIUM, 25 },
+            { EnemyScript.EnemyType.GROUND_SLIDE, 35 },
+            { EnemyScript.EnemyType.GROUND_SLIDE_TOP, 30 },
+          },
+          true,
+
+          // SubWaves
+          2, 1
+        );
+
         break;
+
+      // Unlimited waves
       default:
-        Wave.AddWave(EnemyScript.EnemyType.GROUND_ROLL_ARMOR_8, 10, 0f, false);
+
+        var waveNumberModified = waveNumber - 16 + 1;
+
+        var wavePoints = 315 + (int)(waveNumberModified * (25f * Mathf.Clamp(waveNumberModified * 0.1f, 1, 10000)));
+        var wavePointsRandom = (int)Random.Range(5, 10 + waveNumberModified * 1.5f);
+
+        var subwaveCount = (int)Random.Range(1, 2 + waveNumberModified * 0.08f);
+        var subwaveCountRandom = (int)Random.Range(0, 1 + waveNumberModified * 0.09f);
+
+        Debug.Log($"Custom wave... Points ({wavePoints}, {wavePointsRandom}) . Subwaves ({subwaveCount}, {subwaveCountRandom})");
+
+        QueueWaves(
+
+          // Points
+          wavePoints, wavePointsRandom,
+
+          // Enemy pool
+          new Dictionary<EnemyScript.EnemyType, int>(){
+            { EnemyScript.EnemyType.GROUND_ROLL, 5 },
+            { EnemyScript.EnemyType.GROUND_ROLL_SMALL, 8 },
+            { EnemyScript.EnemyType.GROUND_POP, 10 },
+            { EnemyScript.EnemyType.GROUND_POP_FLOAT, 13 },
+            { EnemyScript.EnemyType.GROUND_ROLL_ARMOR_2, 15 },
+            { EnemyScript.EnemyType.GROUND_ROLL_ARMOR_4, 23 },
+            { EnemyScript.EnemyType.GROUND_ROLL_ARMOR_8, 30 },
+            { EnemyScript.EnemyType.GROUND_SLIDE_SMALL, 18 },
+            { EnemyScript.EnemyType.GROUND_SLIDE_MEDIUM, 25 },
+            { EnemyScript.EnemyType.GROUND_SLIDE, 35 },
+            { EnemyScript.EnemyType.GROUND_SLIDE_TOP, 30 },
+          },
+          true,
+
+          // SubWaves
+          subwaveCount, subwaveCountRandom
+        );
+
         break;
     }
   }
