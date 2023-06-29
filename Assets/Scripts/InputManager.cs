@@ -33,16 +33,6 @@ public class InputManager : MonoBehaviour
         _MouseCurrentPos = Input.mousePosition;
         Moved();
       }
-
-      // Timescale
-      if (Input.GetKeyDown(KeyCode.Space) && Time.timeScale != 0f)
-      {
-        Time.timeScale = 2.5f;
-      }
-      else if (Input.GetKeyUp(KeyCode.Space))
-      {
-        Time.timeScale = 1f;
-      }
     }
   }
 

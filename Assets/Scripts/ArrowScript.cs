@@ -4,15 +4,18 @@ using UnityEngine;
 
 public class ArrowScript : MonoBehaviour
 {
-
-  AudioSource _sHitGround, _sHitSensor, _sHitWood, _sHitMetal, _sAirNoise, _sHitStone;
-
   Rigidbody2D _rb;
+
+  public bool _GameSpawned;
 
   List<Shop.UpgradeType> _upgradeModifiers;
 
+  ParticleSystem _ps_trail,
+      _ps_trailFire;
+  AudioSource _audioPlayer0,
+      _audioPlayer1;
+
   // Use this for initialization
-  public Transform[] _children;
   void Start()
   {
     //Init();
@@ -20,15 +23,16 @@ public class ArrowScript : MonoBehaviour
 
   public void Init()
   {
-    _sHitGround = transform.GetChild(3).GetChild(0).GetComponent<AudioSource>();
-    _sHitSensor = transform.GetChild(3).GetChild(1).GetComponent<AudioSource>();
-    _sHitWood = transform.GetChild(3).GetChild(2).GetComponent<AudioSource>();
-    _sHitMetal = transform.GetChild(3).GetChild(3).GetComponent<AudioSource>();
-    _sHitStone = transform.GetChild(3).GetChild(5).GetComponent<AudioSource>();
+    if (_rb == null)
+    {
+      _rb = GetComponent<Rigidbody2D>();
+      var audioSources = GetComponents<AudioSource>();
+      _audioPlayer0 = audioSources[0];
+      _audioPlayer1 = audioSources[1];
 
-    _sAirNoise = transform.GetChild(3).GetChild(4).GetComponent<AudioSource>();
-
-    _rb = GetComponent<Rigidbody2D>();
+      _ps_trail = transform.GetChild(1).GetChild(0).GetComponent<ParticleSystem>();
+      _ps_trailFire = transform.GetChild(1).GetChild(1).GetComponent<ParticleSystem>();
+    }
 
     _upgradeModifiers = new List<Shop.UpgradeType>();
   }
@@ -36,17 +40,31 @@ public class ArrowScript : MonoBehaviour
   // Update is called once per frame
   void Update()
   {
-    if (_rb == null || _rb.velocity == Vector2.zero) return;
+    if (_rb == null || _rb.velocity == Vector2.zero)
+      return;
     var vel = _rb.velocity;
     transform.rotation = Quaternion.LookRotation(vel, new Vector3(0f, 0f, 1f));
     transform.Rotate(new Vector3(0f, 90f, 0f));
 
-    _sAirNoise.pitch = (1f + _rb.velocity.magnitude / 15f);// * Time.timeScale;
+    if (Time.timeScale == 0f)
+      _audioPlayer0.pitch = 0f;
+    else
+      _audioPlayer0.pitch = (1f + _rb.velocity.magnitude / 15f); // * Time.timeScale;
 
-    if (transform.localPosition.x > 52.2f || transform.localPosition.x < -22.4f || transform.localPosition.y > 100f || transform.localPosition.y < -30f)
+    if (
+        transform.localPosition.x > 52.2f
+        || transform.localPosition.y < -30f
+        || (
+            (transform.localPosition.x < -22.4f || transform.localPosition.y > 100f)
+            && !_GameSpawned
+        )
+    )
     {
-      _children[0].parent = GameResources.s_Instance._ContainerDead;
-      _children[1].parent = GameResources.s_Instance._ContainerDead;
+      // Move particles systems
+      _ps_trail.transform.parent = GameResources.s_Instance._ContainerDead;
+      _ps_trailFire.transform.parent = GameResources.s_Instance._ContainerDead;
+
+      //
       Destroy(gameObject);
     }
   }
@@ -57,49 +75,121 @@ public class ArrowScript : MonoBehaviour
     _upgradeModifiers.Add(upgradeType);
   }
 
+  public void ttest() { }
+
   // Pirce
   public void ActivatePierce()
   {
-    var s = transform.GetChild(2).GetComponent<ParticleSystem>();
-    if (!s.isPlaying)
+    if (!_ps_trailFire.isPlaying)
     {
-      s.Play();
+      _ps_trailFire.Play();
       _rb.mass = 0.5f;
       _rb.gravityScale = 0f;
-      GetComponent<BoxCollider2D>().isTrigger = true;
+      transform.GetChild(0).GetComponent<BoxCollider2D>().isTrigger = true;
+
+      // Check scale
+      var scaleMod = 1f + Mathf.Clamp(Shop.GetUpgradeCount(Shop.UpgradeType.ARROW_PENETRATION) - 1, 0, 1000) * 1f;
+      if(scaleMod != 1f){
+        transform.localScale *= scaleMod;
+      }
     }
   }
+
+  void SetAndPlay(
+      AudioSource current,
+      AudioSource newSource,
+      float pitchMin = 0.8f,
+      float pitchMax = 1.4f,
+      bool oneShot = false
+  )
+  {
+    if (current.isPlaying)
+      current.Stop();
+    current.clip = newSource.clip;
+    current.loop = newSource.loop;
+    current.volume = newSource.volume;
+    current.pitch = Random.Range(pitchMin, pitchMax);
+    if (oneShot)
+      current.PlayOneShot(current.clip);
+    else
+      current.Play();
+  }
+
+  float _lastWoodSfx,
+      _lastStoneSfx;
 
   void OnTriggerEnter2D(Collider2D c)
   {
     // Check for trigger
-    if (c.isTrigger) return;
-
-    // Check for stone
-    if (c.gameObject.name.Equals("Stone")) GameScript.PlaySound(_sHitStone, 0.8f, 2.2f);
+    if (c.isTrigger)
+      return;
 
     // Check out of bounds
     if (c.gameObject.name.Equals("Ground") || c.gameObject.name.Equals("Barrier"))
     {
       Destroy(_rb);
       transform.position += 1.5f * transform.right;
-      _sAirNoise.Stop();
       CleanUp();
       return;
     }
+
     // Check enemy
     var enemyScript = c.transform.parent.gameObject.GetComponent<EnemyScript>();
     if (enemyScript != null)
     {
-      // Play sound FX based on material
-      var sfx = _sHitSensor;
-      if (c.gameObject.name.Equals("Wood")) sfx = _sHitWood;
-      if (c.gameObject.name.Equals("Armor")) sfx = _sHitMetal;
-      if (!c.gameObject.name.Equals("Stone"))
-        GameScript.PlaySound(sfx, 0.8f, 2.2f);
-
       // Check if collider was a sensor
-      enemyScript.CheckHit(c);
+      if (enemyScript.CheckHit(c) && !_GameSpawned)
+      {
+        //Shop.IncrementUpgrades();
+      }
+    }
+
+    // Play sound FX based on material
+    var sfx = GameResources.s_Instance._AudioSfxSensor;
+    if (
+        (enemyScript?._EnemyType ?? EnemyScript.EnemyType.GROUND_ROLL)
+        == EnemyScript.EnemyType.CRATE
+    )
+      sfx = GameResources.s_Instance._AudioSfxCrateBreak;
+    else if (c.gameObject.name.Equals("Wood"))
+    {
+      if (Time.time - _lastWoodSfx < 0.3f)
+      {
+        sfx = null;
+      }
+      else
+      {
+        _lastWoodSfx = Time.time;
+        sfx = GameResources.s_Instance._AudioSfxWood;
+      }
+    }
+    else if (c.gameObject.name.Equals("Armor"))
+      sfx = GameResources.s_Instance._AudioSfxMetal;
+    else if (c.gameObject.name.Equals("Stone"))
+    {
+      if (Time.time - _lastStoneSfx < 0.3f)
+      {
+        sfx = null;
+      }
+      else
+      {
+        _lastStoneSfx = Time.time;
+        sfx = GameResources.s_Instance._AudioSfxWood;
+      }
+    }
+    if (sfx != null)
+      SetAndPlay(_audioPlayer1, sfx, 0.8f, 1.8f, true);
+  }
+
+  static void CheckMaxArrows()
+  {
+    var maxBodies = 50;
+    var bodies = GameResources.s_Instance._ContainerDead.childCount;
+    var diff = bodies - maxBodies;
+
+    while (--diff > -1)
+    {
+      GameObject.Destroy(GameResources.s_Instance._ContainerDead.GetChild(diff).gameObject);
     }
   }
 
@@ -109,102 +199,136 @@ public class ArrowScript : MonoBehaviour
   }
 
   bool _triggered;
+
   void CheckCollision(Collider2D c)
   {
-    if (c.isTrigger) return;
-    if (_triggered) return;
+    if (c.isTrigger)
+      return;
+    if (_triggered)
+      return;
     _triggered = true;
 
     // Check materials
+    var comboDelta = 0f;
     AudioSource hitNoise = null;
-    if (c.gameObject.name.Equals("Wood")) hitNoise = _sHitWood;
-    if (c.gameObject.name.Equals("Armor")) hitNoise = _sHitMetal;
-    if (c.gameObject.name.Equals("Stone")) hitNoise = _sHitStone;
+    if (c.gameObject.name.Equals("Wood"))
+    {
+      hitNoise = GameResources.s_Instance._AudioSfxWood;
+      comboDelta -= PlayerScript._COMBO_REMOVE;
+    }
+    if (c.gameObject.name.Equals("Armor"))
+    {
+      hitNoise = GameResources.s_Instance._AudioSfxMetal;
+      comboDelta += PlayerScript._COMBO_ADD;
+    }
+    if (c.gameObject.name.Equals("Stone"))
+    {
+      hitNoise = GameResources.s_Instance._AudioSfxStone;
+      comboDelta -= PlayerScript._COMBO_REMOVE;
+    }
     if (hitNoise != null)
-      GameScript.PlaySound(hitNoise, 0.8f, 1.2f);
-    _sAirNoise.Stop();
+      SetAndPlay(_audioPlayer1, hitNoise, 0.8f, 1.6f);
 
     // Destroy Physics components
-    Destroy(_rb);
-    Destroy(transform.GetChild(4).GetComponent<BoxCollider2D>());
+    if (transform != null)
+    {
+      Destroy(_rb);
+      transform.GetChild(0).GetComponent<BoxCollider2D>().enabled = false;
+    }
 
     // Move with collider
-    if (c.transform.GetComponent<Rigidbody2D>() != null)
+    if (c.gameObject.name == "Armor" || c.transform.GetComponent<Rigidbody2D>() != null)
     {
       transform.parent = c.transform;
     }
     else if (c.transform.parent.GetComponent<Rigidbody2D>() != null)
+    {
       transform.parent = c.transform.parent;
+    }
     else
+    {
       transform.parent = GameResources.s_Instance._ContainerDead;
+    }
 
     // Check if ground
     if (c.gameObject.name.Equals("Ground"))
     {
       transform.parent = GameResources.s_Instance._ContainerDead;
-    }
-    if (TargetScript.IsTarget(c.gameObject))
-    {
-      var ts = c.transform.parent.GetComponent<TargetScript>();
-      GameScript.PlaySound(_sHitSensor, 0.8f, 2.2f);
-      ts.Die();
+      comboDelta -= PlayerScript._COMBO_REMOVE;
+
+      if (!_GameSpawned)
+      {
+        //PlayerScript.SpawnArrowAbove(transform.position.x);
+      }
     }
 
     // Check if enemy
     var enemyScript = c.transform.parent.gameObject.GetComponent<EnemyScript>();
     if (enemyScript != null)
     {
-
       // Play hit FX based on surface
       if (hitNoise == null)
-        GameScript.PlaySound(_sHitSensor, 0.8f, 2.2f);
+      {
+        if (enemyScript._EnemyType == EnemyScript.EnemyType.CRATE)
+          SetAndPlay(_audioPlayer1, GameResources.s_Instance._AudioSfxCrateBreak, 0.8f, 1.6f);
+        else
+          SetAndPlay(_audioPlayer1, GameResources.s_Instance._AudioSfxSensor, 0.8f, 1.6f);
+      }
 
       // Check if collider was a sensor
-      enemyScript.CheckHit(c);
+      if (enemyScript.CheckHit(c) && !_GameSpawned)
+      {
+        if (enemyScript._EnemyType != EnemyScript.EnemyType.CRATE)
+          Shop.IncrementUpgrades();
+        else
+          PlayerScript.AddCombo(PlayerScript._COMBO_ADD);
+      }
     }
     else
     {
-      GameScript.PlaySound(_sHitGround, 1.8f, 2.2f);
+      SetAndPlay(_audioPlayer1, GameResources.s_Instance._AudioSfxGround, 0.8f, 1.6f);
     }
-    transform.GetChild(1).GetComponent<ParticleSystem>().Play();
+    var ps = GameResources.s_Instance._ParticlesArrowHit;
+    ps.transform.position = transform.position;
+    ps.Play();
 
     // Move particles systems
-    _children[0].parent = GameResources.s_Instance._ContainerDead;
-    _children[1].parent = GameResources.s_Instance._ContainerDead;
+    _ps_trail.transform.parent = GameResources.s_Instance._ContainerDead;
+    _ps_trailFire.transform.parent = GameResources.s_Instance._ContainerDead;
 
     // Check powerup
-    Debug.Log("Mods: ");
-    foreach (var u in _upgradeModifiers)
-      Debug.Log(u);
     if (_upgradeModifiers.Contains(Shop.UpgradeType.ARROW_RAIN))
     {
       PlayerScript.ArrowRain(transform.position.x, _upgradeModifiers);
     }
 
+    // Combo
+    if (comboDelta != 0f && (!_GameSpawned || (_GameSpawned && comboDelta > 0f)))
+      PlayerScript.AddCombo(comboDelta);
+
     // Destroy script
     CleanUp();
+    CheckMaxArrows();
   }
 
   public void Fired()
   {
-    _sAirNoise.Play();
+    SetAndPlay(_audioPlayer0, GameResources.s_Instance._AudioSfxAir, 0.8f, 1.6f);
   }
 
   void CleanUp()
   {
+    transform.GetChild(0).gameObject.SetActive(false);
+    _audioPlayer0.Stop();
+
     IEnumerator CleanUpCo()
     {
       yield return new WaitForSeconds(5f);
 
-      Destroy(_children[0].gameObject);
-      Destroy(_children[1].gameObject);
-      Destroy(_children[2].gameObject);
-      Destroy(_children[3].gameObject);
       Destroy(this);
     }
     StartCoroutine(CleanUpCo());
   }
-
 }
 
 

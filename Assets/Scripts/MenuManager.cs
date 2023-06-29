@@ -5,7 +5,7 @@ using UnityEngine;
 public class MenuManager
 {
 
-  public static GameObject _musicButton, _pauseButton, _waveSign, _coin, _stats, _upgrades;
+  public static GameObject _musicButton, s_ShopButton, _pauseButton, _waveSign, _coin, _stats, _upgrades;
   public static CMenu _mainMenu, _pauseMenu, _winMenu, _shop, _loseMenu, _betweenWaves;
 
   // Use this for initialization
@@ -31,10 +31,12 @@ public class MenuManager
 
     _coin = GameResources.s_Instance._CameraMain.transform.GetChild(0).GetChild(1).GetChild(0).gameObject;
 
+    s_ShopButton = GameObject.Find("ShopButton");
     _musicButton = GameObject.Find("MusicButton");
 
     _waveSign.SetActive(false);
     _pauseButton.SetActive(false);
+    Wave.ToggleShopUI(false);
     _musicButton.SetActive(false);
 
     ToggleGameUI(false);
@@ -145,6 +147,7 @@ public class MenuManager
   {
     _coin.transform.parent.gameObject.SetActive(toggle);
     _upgrades.SetActive(toggle);
+    GameResources.s_Instance._SliderSloMo.gameObject.SetActive(toggle);
   }
 
   // Show a menu after a given time
@@ -182,7 +185,8 @@ public class MenuManager
     text.text = "";
     yield return new WaitForSeconds(2f);
     // Save game before starting waves so can revert if dies
-    GameScript.SaveGame();
+    //GameScript.SaveGame();
+
     // Show coin magic
     int coinsGot = PlayerScript.WaveStats._coinsGained,
         coinsHad = PlayerScript.GetCoins() - coinsGot,
@@ -239,7 +243,7 @@ public class MenuManager
         break;
       case GameScript.GameState.PAUSED:
         _pauseMenu.Hide();
-        Time.timeScale = 1f;
+        Time.timeScale = 2.5f;
         break;
       case GameScript.GameState.WIN:
         _winMenu.Hide();
@@ -269,40 +273,32 @@ public class MenuManager
     {
       _mainMenu.Hide();
       GameScript._state = GameScript.GameState.PLAY;
-      if (GameScript._mode == GameScript.GameMode.TARGETS)
+      GameScript.LoadGameSettings();
+      Shop.Load();
+      PlayerScript.Reset();
+      ToggleGameUI(true);
+
+      Shop.UpdateShopPrices();
+
+      if (Wave.s_MetaWaveIter == 0)
       {
-        Wave.DestroyAll();
         _pauseButton.SetActive(true);
-        _waveSign.SetActive(true);
-        SetWaveSign("" + 1);
-        GameScript.Targets.Init();
+        Wave.ToggleShopUI(false);
+
+        // Play music
+        var s = GameScript.s_Instance.GetComponent<AudioSource>();
+        if (!s.isPlaying)
+        {
+          s.Play();
+        }
+
+        StartGame();
+
       }
       else
       {
-        GameScript.LoadGameSettings();
-        Shop.Load();
-        PlayerScript.WaveStats.Reset();
-        ToggleGameUI(true);
-
-        if (Wave.s_MetaWaveIter == 0)
-        {
-          _pauseButton.SetActive(true);
-
-          // Play music
-          var s = GameScript.s_Instance.GetComponent<AudioSource>();
-          if (!s.isPlaying)
-          {
-            s.Play();
-          }
-
-          StartGame();
-
-        }
-        else
-        {
-          Shop.UpdateShopPrices();
-          Shop.ToggleShop(true);
-        }
+        Shop.UpdateShopPrices();
+        Shop.ToggleShop(true);
       }
       ButtonNoise();
     }
@@ -315,38 +311,62 @@ public class MenuManager
     }
     else if (hit.collider.name.Equals("ToWave"))
     {
-      Shop.Save();
-      StartGame();
+      //Shop.Save();
       ButtonNoise();
+
+      _pauseButton.SetActive(true);
+      _shop.Hide();
+      if (Wave.ShopVisible())
+      {
+        Wave.ToggleShopUI(true);
+      }
+
+      _shop.Hide();
+      Time.timeScale = GameScript.s_TimeSped ? 2.5f : 1f;
+      GameScript._state = GameScript.GameState.PLAY;
+
+      //StartGame();
+    }
+    else if (hit.collider.name.Equals("RerollButton"))
+    {
+      var rerollCost = GameScript.s_NumRerolls * 100;
+      var playerMoney = PlayerScript.GetCoins();
+      if (playerMoney >= rerollCost)
+      {
+        GameScript.s_NumRerolls++;
+        Shop.SoundPurchase();
+        PlayerScript.SetCoins(playerMoney - rerollCost);
+        Shop.UpdateShopPrices();
+        Shop.UpdateShopPriceStatuses();
+      }
     }
     else if (hit.collider.name.Equals("ToMenu"))
     {
+      Wave.DestroyAll();
       ExitToMenu();
       ToggleGameUI(false);
       ButtonNoise();
     }
     else if (hit.collider.name.Equals("Resume"))
     {
-      Time.timeScale = 1f;
+      Time.timeScale = GameScript.s_TimeSped ? 2.5f : 1f;
       _pauseMenu.Hide();
       _pauseButton.SetActive(true);
+      if (Wave.ShopVisible())
+        Wave.ToggleShopUI(true);
       MenuManager._musicButton.SetActive(false);
       GameScript._state = GameScript.GameState.PLAY;
       ButtonNoise();
     }
     else if (hit.collider.name.Equals("MusicButton"))
     {
-      ToggleMusic();
+      GameScript.s_musicPlaying = !GameScript.s_musicPlaying;
+      UpdateMusicFX();
       ButtonNoise();
     }
     else if (hit.collider.name.Equals("ModeWave"))
     {
       GameScript.SwitchModes(GameScript.GameMode.WAVES);
-      ButtonNoise();
-    }
-    else if (hit.collider.name.Equals("ModeTarget"))
-    {
-      GameScript.SwitchModes(GameScript.GameMode.TARGETS);
       ButtonNoise();
     }
 
@@ -358,24 +378,26 @@ public class MenuManager
   }
 
   public static float s_waveStart;
-  static void StartGame()
+  public static void StartGame()
   {
     s_waveStart = Time.time;
 
-    // Fix inputmanager
+    /*/ Fix inputmanager
     Vector2 pos = Input.mousePosition;
     InputManager._MouseCurrentPos = pos;
     InputManager._MouseDownPos = pos;
-    InputManager._MouseUpPos = pos;
+    InputManager._MouseUpPos = pos;*/
 
     PlayerScript.WaveStats.Reset();
-    Shop.ToggleShop(false);
+
+    //Shop.ToggleShop(false);
     Wave.LoadWaves(Wave.s_MetaWaveIter);
     Wave.StartWaves();
     GameScript._state = GameScript.GameState.PLAY;
     _pauseButton.SetActive(true);
+
     // Play music
-    AudioSource s = GameScript.s_Instance.GetComponent<AudioSource>();
+    var s = GameScript.s_Instance.GetComponent<AudioSource>();
     if (!s.isPlaying)
     {
       s.Play();
@@ -387,10 +409,9 @@ public class MenuManager
     PlayerScript.ButtonNoise();
   }
 
-  public static void ToggleMusic()
+  public static void UpdateMusicFX()
   {
     var s = GameScript.s_Instance.GetComponent<AudioSource>();
-    GameScript.s_musicPlaying = !GameScript.s_musicPlaying;
     if (GameScript.s_musicPlaying)
     {
       s.volume = 0.4f;

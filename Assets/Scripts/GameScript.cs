@@ -4,7 +4,6 @@ using UnityEngine;
 
 public class GameScript : MonoBehaviour
 {
-
   public static GameScript s_Instance;
 
   public float _dayAmount;
@@ -14,7 +13,10 @@ public class GameScript : MonoBehaviour
   public static GameState _state;
   public static GameMode _mode;
 
-  public static bool s_musicPlaying, s_HasWon;
+  public static bool s_musicPlaying,
+      s_HasWon,
+      s_TimeSped;
+  public static int s_NumRerolls, s_NumHealthBuys;
 
   static Color _SkyColor;
 
@@ -32,7 +34,6 @@ public class GameScript : MonoBehaviour
   public enum GameMode
   {
     WAVES,
-    TARGETS
   }
 
   // Use this for initialization
@@ -49,12 +50,15 @@ public class GameScript : MonoBehaviour
     //
     UpdateResolution();
 
-
     s_musicPlaying = true;
 
     _state = GameState.MAIN_MENU;
 
-    _SkyColor = GameObject.Find("Sky").transform.GetChild(0).GetComponent<MeshRenderer>().material.color;
+    _SkyColor = GameObject
+        .Find("Sky")
+        .transform.GetChild(0)
+        .GetComponent<MeshRenderer>()
+        .material.color;
 
     //ResetGame();
     LoadGameSettings();
@@ -68,15 +72,13 @@ public class GameScript : MonoBehaviour
 
     _timeCycle = 60f + UnityEngine.Random.value * 600f;
 
-    _mode = GameMode.TARGETS;
     SwitchModes(GameMode.WAVES);
   }
 
   public void UpdateResolution()
   {
-
-    var width = 640;
-    var height = 360;
+    var width = 854;
+    var height = 480;
     var fullscreen = true;
 
     /*#if UNITY_EDITOR
@@ -97,7 +99,6 @@ public class GameScript : MonoBehaviour
     // obtain camera component so we can modify its viewport
     foreach (var camera in new Camera[] { GameResources.s_Instance._CameraMain })
     {
-
       // if scaled height is less than current height, add letterbox
       if (scaleheight < 1.0f)
       {
@@ -128,6 +129,11 @@ public class GameScript : MonoBehaviour
   // Update is called once per frame
   void Update()
   {
+    if (Screen.width != 640)
+    {
+      UpdateResolution();
+    }
+
     InputManager.HandleInput();
 
     MenuManager.Update();
@@ -140,9 +146,6 @@ public class GameScript : MonoBehaviour
       {
         case GameMode.WAVES:
           Wave.Update();
-          break;
-        case GameMode.TARGETS:
-          Targets.Update();
           break;
       }
     }
@@ -162,19 +165,20 @@ public class GameScript : MonoBehaviour
       }
     }
 
-    if (_state == GameState.MAIN_MENU || _state == GameState.SHOP)
+    /*if (_state == GameState.MAIN_MENU || _state == GameState.SHOP)
     {
       if (Mathf.RoundToInt(UnityEngine.Random.value * 500f) == 0f)
       {
         if (GameObject.Find("Alive").transform.childCount > 20) return;
         EnemyScript.SpawnEnemy(s_HasWon ? EnemyScript.EnemyType.GROUND_ROLL_ARMOR_8 : EnemyScript.EnemyType.GROUND_ROLL, false);
       }
-    }
+    }*/
   }
 
   public static class Targets
   {
-    static public int _Difficulty, _MinTargets;
+    static public int _Difficulty,
+        _MinTargets;
 
     static public void Init()
     {
@@ -182,24 +186,13 @@ public class GameScript : MonoBehaviour
       _MinTargets = 0;
       SetHealth(2);
       PlayerScript.SetAmmoMax(3);
-      PlayerScript.ResetTarget();
-    }
-
-    static bool IsTargets()
-    {
-      if (GameObject.Find("Alive").transform.childCount > _MinTargets) return true;
-      return false;
-    }
-
-    public static void Update()
-    {
-      if (IsTargets()) return;
-      SpawnTarget();
+      PlayerScript.Reset();
     }
 
     static void SpawnTarget()
     {
-      float tSize, forceMod = 1f;
+      float tSize,
+          forceMod = 1f;
       TargetScript.TargetType type = TargetScript.TargetType.FLY;
       switch (_Difficulty)
       {
@@ -248,7 +241,11 @@ public class GameScript : MonoBehaviour
           break;
       }
 
-      TargetScript s = GameScript.SpawnTarget(GameObject.Find("ShootEffect").transform.parent.position, tSize, type);//new Vector2(4f + UnityEngine.Random.value * 34f, -5f + UnityEngine.Random.value * 15f), tSize);
+      TargetScript s = GameScript.SpawnTarget(
+          GameObject.Find("ShootEffect").transform.parent.position,
+          tSize,
+          type
+      ); //new Vector2(4f + UnityEngine.Random.value * 34f, -5f + UnityEngine.Random.value * 15f), tSize);
       s._forceModifier = forceMod;
 
       DestroyPS();
@@ -260,8 +257,15 @@ public class GameScript : MonoBehaviour
       for (var i = dead.childCount - 1; i >= 0; i--)
       {
         var t = dead.transform.GetChild(i);
-        if ((t.gameObject.name.Length > 9 && t.gameObject.name.Substring(0, 9).Equals("Explosion")) ||
-            t.gameObject.name.Equals("Trail") || t.gameObject.name.Equals("FireTrail")) Destroy(t.gameObject);
+        if (
+            (
+                t.gameObject.name.Length > 9
+                && t.gameObject.name.Substring(0, 9).Equals("Explosion")
+            )
+            || t.gameObject.name.Equals("Trail")
+            || t.gameObject.name.Equals("FireTrail")
+        )
+          Destroy(t.gameObject);
       }
     }
   }
@@ -272,10 +276,18 @@ public class GameScript : MonoBehaviour
     var sun = GameResources.s_Instance._Sun;
     var sky = GameResources.s_Instance._Sky;
 
-    sun.transform.position = Vector3.Lerp(new Vector3(35.9f, 0f, 3f), new Vector3(47.2f, 18.4f, 3f), GameScript.s_Instance._dayAmount);
-    sun.transform.GetChild(0).GetComponent<Light>().intensity = Mathf.Lerp(0.1f, 1f, GameScript.s_Instance._dayAmount);
+    sun.transform.position = Vector3.Lerp(
+        new Vector3(35.9f, 0f, 3f),
+        new Vector3(47.2f, 18.4f, 3f),
+        GameScript.s_Instance._dayAmount
+    );
+    sun.transform.GetChild(0).GetComponent<Light>().intensity = Mathf.Lerp(
+        0.1f,
+        1f,
+        GameScript.s_Instance._dayAmount
+    );
 
-    var c = Color.Lerp(_SkyColor / 1.4f, _SkyColor, GameScript.s_Instance._dayAmount);
+    var c = Color.Lerp(_SkyColor / 1.2f, _SkyColor, GameScript.s_Instance._dayAmount);
     for (var i = 0; i < sky.transform.childCount; i++)
     {
       sky.transform.GetChild(i).GetComponent<MeshRenderer>().material.color = c;
@@ -284,7 +296,6 @@ public class GameScript : MonoBehaviour
 
   static IEnumerator TurnDayCo(float time)
   {
-
     var saveTime = time;
     while (time > 0f)
     {
@@ -315,29 +326,36 @@ public class GameScript : MonoBehaviour
 
   public static void TurnDay()
   {
-    if (s_Instance._dayAmount != 0f) return;
+    if (s_Instance._dayAmount != 0f)
+      return;
     s_Instance.StartCoroutine(TurnDayCo(20f));
   }
 
   public static void TurnNight()
   {
-    if (s_Instance._dayAmount != 1f) return;
+    if (s_Instance._dayAmount != 1f)
+      return;
     s_Instance.StartCoroutine(TurnNightCo(20f));
   }
 
-  static float _shake, _shakeAmount, _decreaseFactor;
+  static float _shake,
+      _shakeAmount,
+      _decreaseFactor;
+
   static public void ShakeLight()
   {
     _shake = 0.2f;
     _shakeAmount = 0.2f;
     _decreaseFactor = 1f;
   }
+
   static public void ShakeHeavy()
   {
     _shake = 0.5f;
     _shakeAmount = 0.7f;
     _decreaseFactor = 1f;
   }
+
   static void UpdateScreenShake()
   {
     var camera = GameResources.s_Instance._CameraMain;
@@ -355,15 +373,16 @@ public class GameScript : MonoBehaviour
 
   static public void Freeze()
   {
-    s_Instance.StartCoroutine(TurnTimeFor(Time.timeScale == 2.5f ? 1f : 0f, 0.2f));
+    s_Instance.StartCoroutine(TurnTimeFor(s_TimeSped ? 1f : 0f, 0.2f));
   }
 
   static IEnumerator TurnTimeFor(float newTime, float amount)
   {
-    float save = Time.timeScale;
-    Time.timeScale = newTime;
+    if (_state != GameState.SHOP)
+      Time.timeScale = newTime;
     yield return new WaitForSecondsRealtime(amount);
-    Time.timeScale = save;
+    if (_state != GameState.SHOP)
+      Time.timeScale = s_TimeSped ? 2.5f : 1f;
   }
 
   // Save player stats
@@ -387,17 +406,18 @@ public class GameScript : MonoBehaviour
   public static void LoadGameSettings()
   {
     // Load music toggle
-    var musicToggle = PlayerPrefs.GetInt("Music", 1) == 1;
-    if (musicToggle)
-    {
-      MenuManager.ToggleMusic();
-    }
+    s_musicPlaying = PlayerPrefs.GetInt("Music", 1) == 1;
+
+    s_NumRerolls = 0;
+    s_NumHealthBuys = 0;
+
+    MenuManager.UpdateMusicFX();
   }
 
   // Reset player save / game over
   public static void ResetGame()
   {
-    Debug.LogWarning("ResetGame() => Not defined");
+    PlayerScript.Reset();
   }
 
   public static void SetHealth(int health)
@@ -482,10 +502,7 @@ public class GameScript : MonoBehaviour
         SpawnExplosion(alive.transform.GetChild(i).position);
         alive.transform.GetChild(i).GetComponent<EnemyScript>().Die(true);
       }
-      catch (Exception e)
-      {
-
-      }
+      catch (Exception e) { }
       yield return new WaitForSeconds(0.2f);
     }
   }
@@ -529,8 +546,9 @@ public class GameScript : MonoBehaviour
     // Show lose menu
     MenuManager.ShowMenuAfterTime(MenuManager._loseMenu, 2f);
 
-    // Hide pause button
+    // Hide buttons
     MenuManager._pauseButton.SetActive(false);
+    Wave.ToggleShopUI(false);
 
     // Lose noise
     GameScript.PlaySound(GameObject.Find("Lose"));
@@ -538,7 +556,8 @@ public class GameScript : MonoBehaviour
 
   static public void Win()
   {
-    if (!StateAtPlay()) return;
+    if (!StateAtPlay())
+      return;
     _state = GameState.WIN;
 
     // Win noise
@@ -548,6 +567,7 @@ public class GameScript : MonoBehaviour
     MenuManager.ShowMenuAfterTime(MenuManager._winMenu, 5f);
     MenuManager.ToggleGameUI(false);
     MenuManager._pauseButton.SetActive(false);
+    Wave.ToggleShopUI(false);
 
     // Save the win
     PlayerPrefs.SetInt("Win0", 1);
@@ -557,12 +577,20 @@ public class GameScript : MonoBehaviour
     s_Instance.StartCoroutine(MenuManager.ShowWinStats());
   }
 
-  static public TargetScript SpawnTarget(Vector2 position, float size = 1f, TargetScript.TargetType type = TargetScript.TargetType.ROLL)
+  static public TargetScript SpawnTarget(
+      Vector2 position,
+      float size = 1f,
+      TargetScript.TargetType type = TargetScript.TargetType.ROLL
+  )
   {
     var t = Instantiate(GameObject.Find("Target"));
     t.name = "Target";
     t.transform.localScale = new Vector3(size, size, 1f);
-    t.transform.position = new Vector3(50f + UnityEngine.Random.value * 10f, -3.5f + UnityEngine.Random.value * 18f, 0f);
+    t.transform.position = new Vector3(
+        50f + UnityEngine.Random.value * 10f,
+        -3.5f + UnityEngine.Random.value * 18f,
+        0f
+    );
     t.transform.parent = GameObject.Find("Alive").transform;
     var s = t.GetComponent<TargetScript>();
     s.Init(position, type);
@@ -572,7 +600,9 @@ public class GameScript : MonoBehaviour
   static public ParticleSystem SpawnExplosion(Vector3 position)
   {
     // Spawn explosion
-    var explosion = Instantiate(Resources.Load("ParticleSystems/ExplosionSystem") as GameObject);
+    var explosion = Instantiate(
+        Resources.Load("ParticleSystems/ExplosionSystem") as GameObject
+    );
     explosion.transform.parent = GameResources.s_Instance._ContainerDead;
     explosion.transform.position = position;
     return explosion.GetComponent<ParticleSystem>();
@@ -580,27 +610,27 @@ public class GameScript : MonoBehaviour
 
   static public void SwitchModes(GameMode newMode)
   {
-    if (_mode == newMode) return;
+    if (_mode == newMode)
+      return;
     GameObject barrier = GameObject.Find("BarrierMod"),
         spawnLine = GameResources.s_Instance._SpawnLine.gameObject,
         waveButton = GameObject.Find("MainMenu").transform.GetChild(1).gameObject,
         targetButton = GameObject.Find("MainMenu").transform.GetChild(2).gameObject;
-    waveButton.GetComponent<MeshRenderer>().material.color = GameObject.Find("Stone").GetComponent<MeshRenderer>().material.color * 1.5f;
-    targetButton.GetComponent<MeshRenderer>().material.color = GameObject.Find("Stone").GetComponent<MeshRenderer>().material.color * 1.5f;
+    waveButton.GetComponent<MeshRenderer>().material.color =
+        GameObject.Find("Stone").GetComponent<MeshRenderer>().material.color * 1.5f;
+    targetButton.GetComponent<MeshRenderer>().material.color =
+        GameObject.Find("Stone").GetComponent<MeshRenderer>().material.color * 1.5f;
     switch (newMode)
     {
-      case GameMode.TARGETS:
-        barrier.transform.position = new Vector3(250f, 0f, 0f);
-        //spawnLine.transform.position = new Vector3(250f, 0f, 0f);
-        targetButton.GetComponent<MeshRenderer>().material.color = GameObject.Find("Play").GetComponent<MeshRenderer>().material.color;
-        break;
       case GameMode.WAVES:
         barrier.transform.position = new Vector3(26.8f, -5.5f, 0f);
         //spawnLine.transform.position = new Vector3(62.1f, -3.1f, 0f);
-        waveButton.GetComponent<MeshRenderer>().material.color = GameObject.Find("Play").GetComponent<MeshRenderer>().material.color;
+        waveButton.GetComponent<MeshRenderer>().material.color = GameObject
+            .Find("Play")
+            .GetComponent<MeshRenderer>()
+            .material.color;
         break;
     }
     _mode = newMode;
   }
-
 }

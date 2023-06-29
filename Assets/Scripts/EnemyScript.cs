@@ -3,20 +3,26 @@ using UnityEngine;
 
 public class EnemyScript : MonoBehaviour
 {
-
   public EnemyType _EnemyType;
 
   Rigidbody2D _rb;
 
   int _flag;
 
-  public bool _IsDead, _CanDropLoot;
+  public bool _IsDead,
+      _CanDropLoot;
 
-  public MeshRenderer[] _Sensors, _Armor;
+  public MeshRenderer[] _Sensors,
+      _Armor;
 
   public float _ForceModifier;
 
   public AudioSource _EnemyNoise;
+
+  bool _beforeSpawn
+  {
+    get { return _rb.position.x > GameResources.s_Instance._SpawnLine.GetChild(0).position.x; }
+  }
 
   public enum EnemyType
   {
@@ -46,9 +52,14 @@ public class EnemyScript : MonoBehaviour
   }
 
   // Use this for initialization
-  float _pitchSave, _forceModSave, _spawnTime, _restTime;
+  float _pitchSave,
+      _forceModSave,
+      _spawnTime,
+      _restTime;
+
   [System.NonSerialized]
   public bool _IsSlide;
+
   void Start()
   {
     Init();
@@ -59,8 +70,16 @@ public class EnemyScript : MonoBehaviour
       _forceModSave = _ForceModifier;
   }
 
+  public void Spawn()
+  {
+    _spawnTime = Time.time;
+    gameObject.SetActive(true);
+  }
+
   public void Init()
   {
+    if (_rb != null)
+      return;
     _rb = GetComponent<Rigidbody2D>();
 
     _spawnTime = Time.time;
@@ -74,20 +93,28 @@ public class EnemyScript : MonoBehaviour
 
     // Check slide
     if (
-      _EnemyType == EnemyType.GROUND_SLIDE_SMALL ||
-      _EnemyType == EnemyType.GROUND_SLIDE_MEDIUM ||
-      _EnemyType == EnemyType.GROUND_SLIDE ||
-      _EnemyType == EnemyType.GROUND_SLIDE_TOP ||
-      _EnemyType == EnemyType.GROUND_SLIDE_CASTLE ||
-      _EnemyType == EnemyType.GROUND_TOTEM_5
+        _EnemyType == EnemyType.GROUND_SLIDE_SMALL
+        || _EnemyType == EnemyType.GROUND_SLIDE_MEDIUM
+        || _EnemyType == EnemyType.GROUND_SLIDE
+        || _EnemyType == EnemyType.GROUND_SLIDE_TOP
+        || _EnemyType == EnemyType.GROUND_SLIDE_CASTLE
+        || _EnemyType == EnemyType.GROUND_TOTEM_5
     )
     {
       _IsSlide = true;
     }
 
     // Check floating
-    if(_EnemyType == EnemyType.GROUND_POP_FLOAT){
+    if (_EnemyType == EnemyType.GROUND_POP_FLOAT)
+    {
       _flag = Random.Range(0, 10);
+    }
+
+    // Perk
+    var sizeMod = Shop.GetUpgradeCount(Shop.UpgradeType.ENEMY_SIZED) * 1.3f;
+    if (sizeMod > 0)
+    {
+      transform.localScale *= sizeMod;
     }
 
     /*if(_type == EnemyType.BOSS)
@@ -116,7 +143,20 @@ public class EnemyScript : MonoBehaviour
       Die(false);
     }
 
-    if (_IsSlide) return;
+    if (_IsSlide)
+    {
+      if (GameScript.StateAtPlay())
+      {
+        if (_EnemyNoise.isPlaying)
+          _EnemyNoise.pitch = 1f;
+      }
+      else
+      {
+        if (_EnemyNoise.isPlaying)
+          _EnemyNoise.pitch = 0f;
+      }
+      return;
+    }
 
     // Make sure not flying towards player very quickly
     if (_rb.velocity.x < -8f)
@@ -139,12 +179,24 @@ public class EnemyScript : MonoBehaviour
     {
       _ForceModifier = _forceModSave;
     }
+
+    if (Time.time - _spawnTime > 25f && _beforeSpawn)
+    {
+      Die(false);
+    }
+
+    if (transform.position.y > 80f)
+    {
+      Die(false);
+    }
   }
 
   float _timer = 1f;
+
   void Move()
   {
-    if (_IsDead) return;
+    if (_IsDead)
+      return;
     switch (_EnemyType)
     {
       case (EnemyType.GROUND_ROLL):
@@ -170,7 +222,7 @@ public class EnemyScript : MonoBehaviour
         _rb.AddTorque(8f * _ForceModifier);
         break;
       case (EnemyType.GROUND_POP):
-        if (_rb.position.x > GameResources.s_Instance._SpawnLine.GetChild(0).position.x)
+        if (_beforeSpawn)
         {
           _rb.AddTorque(6f * _ForceModifier);
           break;
@@ -180,7 +232,12 @@ public class EnemyScript : MonoBehaviour
         {
           //_rb.velocity = Vector3.zero;
           _rb.AddTorque(100f * _ForceModifier);
-          _rb.AddForce(new Vector2(-150f * Random.Range(0.7f, 1.1f), 775f * Random.Range(0.55f, 1.1f)) * _ForceModifier);
+          _rb.AddForce(
+              new Vector2(
+                  -150f * Random.Range(0.7f, 1.1f),
+                  775f * Random.Range(0.65f, 1.2f)
+              ) * _ForceModifier
+          );
 
           _timer = 3f + Random.value * 3f;
 
@@ -192,7 +249,7 @@ public class EnemyScript : MonoBehaviour
       case (EnemyType.GROUND_POP_FLOAT):
 
         // In spawn
-        if (_rb.position.x > GameResources.s_Instance._SpawnLine.GetChild(0).position.x)
+        if (_beforeSpawn)
         {
           if (_rb.angularDrag != 1.8f)
             _rb.angularDrag = 1.8f;
@@ -232,7 +289,6 @@ public class EnemyScript : MonoBehaviour
           vel.x += (-4f - vel.x) * Time.deltaTime * 5f;
           _rb.velocity = vel;
         }
-
         // Else, when in air, stop movement and float towards player
         else
         {
@@ -251,7 +307,12 @@ public class EnemyScript : MonoBehaviour
         {
           _rb.angularDrag = 0.4f;
           _rb.AddTorque(100f * _ForceModifier);
-          _rb.AddForce(new Vector2(-150f * Random.Range(0.7f, 1.1f), 775f * Random.Range(0.9f, 1.1f)) * _ForceModifier);
+          _rb.AddForce(
+              new Vector2(
+                  -150f * Random.Range(0.7f, 1.1f),
+                  775f * Random.Range(0.95f, 1.15f)
+              ) * _ForceModifier
+          );
 
           _timer = 1f + Random.value * 2f;
 
@@ -260,55 +321,72 @@ public class EnemyScript : MonoBehaviour
         break;
 
       case (EnemyType.GROUND_SLIDE):
-        _rb.MovePosition(transform.position + new Vector3(-1f, 0f, 0f) * Time.fixedDeltaTime);
-        if (transform.position.x < -6f)
+        _rb.MovePosition(
+            transform.position + new Vector3(-1f, 0f, 0f) * Time.fixedDeltaTime
+        );
+        if (transform.position.x < -11f)
         {
           PlayerScript.s_Singleton.Hit();
           Die(false);
         }
         break;
       case (EnemyType.GROUND_SLIDE_SMALL):
-        _rb.MovePosition(transform.position + new Vector3(-1f, 0f, 0f) * Time.fixedDeltaTime);
-        if (transform.position.x < -6f)
+        _rb.MovePosition(
+            transform.position + new Vector3(-1f, 0f, 0f) * Time.fixedDeltaTime
+        );
+        if (transform.position.x < -11f)
         {
           PlayerScript.s_Singleton.Hit();
           Die(false);
         }
         break;
       case (EnemyType.GROUND_SLIDE_MEDIUM):
-        _rb.MovePosition(transform.position + new Vector3(-1f, 0f, 0f) * Time.fixedDeltaTime);
-        if (transform.position.x < -6f)
+        _rb.MovePosition(
+            transform.position + new Vector3(-1f, 0f, 0f) * Time.fixedDeltaTime
+        );
+        if (transform.position.x < -11f)
         {
           PlayerScript.s_Singleton.Hit();
           Die(false);
         }
         break;
       case (EnemyType.GROUND_SLIDE_TOP):
-        _rb.MovePosition(transform.position + new Vector3(-1f, 0f, 0f) * Time.fixedDeltaTime);
-        if (transform.position.x < -6f)
+        _rb.MovePosition(
+            transform.position + new Vector3(-1f, 0f, 0f) * Time.fixedDeltaTime
+        );
+        if (transform.position.x < -11f)
         {
           PlayerScript.s_Singleton.Hit();
           Die(false);
         }
         break;
       case (EnemyType.GROUND_SLIDE_CASTLE):
-        _rb.MovePosition(transform.position + new Vector3(-1f, 0f, 0f) * Time.fixedDeltaTime);
-        if (transform.position.x < -6f)
+        _rb.MovePosition(
+            transform.position + new Vector3(-1f, 0f, 0f) * Time.fixedDeltaTime
+        );
+        if (transform.position.x < -11f)
         {
           PlayerScript.s_Singleton.Hit();
           Die(false);
         }
         break;
       case (EnemyType.GROUND_TOTEM_5):
-        _rb.MovePosition(transform.position + new Vector3(-1f, 0f, 0f) * Time.fixedDeltaTime);
-        if (transform.position.x < -6f)
+        _rb.MovePosition(
+            transform.position + new Vector3(-1f, 0f, 0f) * Time.fixedDeltaTime
+        );
+        if (transform.position.x < -11f)
         {
           PlayerScript.s_Singleton.Hit();
           Die(false);
         }
         break;
       case (EnemyType.FLYING_HOMING):
-        if (Vector3.Distance(PlayerScript.s_Singleton.transform.position, transform.position) > 50f)
+        if (
+            Vector3.Distance(
+                PlayerScript.s_Singleton.transform.position,
+                transform.position
+            ) > 50f
+        )
         {
           _rb.AddForce(new Vector3(-1f, 0f, 0f) * 15);
           break;
@@ -326,16 +404,19 @@ public class EnemyScript : MonoBehaviour
         else if (_timer < 0f)
         {
           // Find direction to player
-          Vector3 dir = (PlayerScript.s_Singleton.transform.position - transform.position);
+          Vector3 dir = (
+              PlayerScript.s_Singleton.transform.position - transform.position
+          );
           _rb.AddForce(dir.normalized * 10f);
         }
         break;
     }
   }
 
-  public void CheckHit(Collider2D c)
+  public bool CheckHit(Collider2D c)
   {
-    if (_Sensors.Length == 0) return;
+    if (_Sensors.Length == 0)
+      return false;
 
     // Check sensors
     switch (c.name)
@@ -346,18 +427,20 @@ public class EnemyScript : MonoBehaviour
           var c1 = r.gameObject.GetComponent<Collider2D>();
           if (c1.GetInstanceID() == c.GetInstanceID())
           {
-            if (r.material.color == Color.black) break;
+            if (r.material.color == Color.black)
+              break;
             r.material.color = Color.black;
 
             // Check towers
             if (_IsSlide)
             {
-
               // Explosion FX
-              var explosion = Instantiate(Resources.Load("ParticleSystems/ExplosionSystem") as GameObject);
+              var explosion = Instantiate(
+                  Resources.Load("ParticleSystems/ExplosionSystem") as GameObject
+              );
               explosion.transform.parent = r.transform.parent;
               explosion.transform.position = r.transform.position;
-              float mag = r.transform.localScale.x;
+              var mag = r.transform.localScale.x;
               if (mag > 1f)
               {
                 mag /= 3f;
@@ -370,14 +453,16 @@ public class EnemyScript : MonoBehaviour
               // Fire FX
               if (_Sensors.Length > 1)
               {
-                var fire = Instantiate(Resources.Load("ParticleSystems/FireSystem") as GameObject);
+                var fire = Instantiate(
+                    Resources.Load("ParticleSystems/FireSystem") as GameObject
+                );
                 fire.transform.parent = r.transform.parent;
                 fire.transform.position = r.transform.position;
+
+                PlayerScript.AddCombo(PlayerScript._COMBO_ADD);
               }
             }
-
-            CheckSensors();
-            return;
+            return CheckSensors();
           }
         }
         break;
@@ -386,49 +471,64 @@ public class EnemyScript : MonoBehaviour
         CheckArmor(c);
         break;
     }
+    return false;
   }
 
   void CheckArmor(Collider2D c)
   {
     // Check armor
-    foreach (var r in _Armor)
+    foreach (var mr in _Armor)
     {
-      if (r == null) continue;
-      var c1 = r.gameObject.GetComponent<Collider2D>();
+      if (mr == null)
+        continue;
+      var c1 = mr.transform.parent.GetComponent<Collider2D>();
       if (c1.GetInstanceID() == c.GetInstanceID())
       {
-        if (r.material.color == Color.black) break;
-        r.material.color = Color.black;
-        r.gameObject.transform.position += new Vector3(0f, 0f, -4f);
-        var rb = r.gameObject.AddComponent<Rigidbody2D>();
+        // Color
+        if (mr.material.color == Color.black)
+          break;
+        mr.material.color = Color.black;
+
+        // Physics
+        mr.transform.position += new Vector3(0f, 0f, -5f);
+        var rb = mr.transform.parent.gameObject.AddComponent<Rigidbody2D>();
         rb.mass = 0.15f;
+        var ran = Random.Range(0.5f, 1f);
+        rb.AddTorque((Random.value < 0.5f ? -1f : 1f) * ran * 250f);
+        var dir = (mr.transform.position - transform.position);
+        rb.AddForce(dir * 40f * Random.Range(0.5f, 1f));
         Physics2D.IgnoreCollision(GameResources.s_Instance._ColliderGround, c1);
         c1.isTrigger = true;
-        r.gameObject.transform.parent = GameResources.s_Instance._ContainerDead;
-        _rb.mass -= 0.02f;
+        mr.transform.parent.parent = GameResources.s_Instance._ContainerDead;
+        //_rb.mass -= 0.02f;
         return;
       }
     }
   }
 
-  public void CheckSensors()
+  public bool CheckSensors()
   {
     foreach (var r in _Sensors)
     {
-      if (r.material.color != Color.black) return;
+      if (r.material.color != Color.black)
+        return false;
     }
 
     Die(_EnemyType == EnemyType.CRATE ? false : true);
+    return true;
   }
 
   public void Die(bool dropLoot = true)
   {
-    if (_IsDead) return;
+    if (_IsDead)
+      return;
 
     // If lost, do not die
-    if (GameScript._state == GameScript.GameState.LOSE) return;
+    if (GameScript._state == GameScript.GameState.LOSE)
+      return;
 
-    if (PlayerScript.GetAmmo() == 0) PlayerScript.GiveAmmo();
+    if (PlayerScript.GetAmmo() == 0)
+      PlayerScript.GiveAmmo();
 
     _IsDead = true;
 
@@ -445,8 +545,9 @@ public class EnemyScript : MonoBehaviour
     // Destroy armor
     foreach (var r in _Armor)
     {
-      if (r == null) continue;
-      CheckArmor(r.transform.GetComponent<Collider2D>());
+      if (r == null)
+        continue;
+      CheckArmor(r.transform.parent.GetComponent<Collider2D>());
     }
 
     // Crate specific
@@ -477,7 +578,8 @@ public class EnemyScript : MonoBehaviour
     }
     else
     {
-      GameScript.ShakeLight();
+      if (!_beforeSpawn)
+        GameScript.ShakeLight();
     }
 
     // Move through air
@@ -499,7 +601,7 @@ public class EnemyScript : MonoBehaviour
     {
       DropLoot();
 
-      Shop.IncrementUpgrades();
+      PlayerScript.AddCombo(PlayerScript._COMBO_ADD);
     }
 
     // Check win
@@ -512,21 +614,29 @@ public class EnemyScript : MonoBehaviour
   }
 
   float _enemyNoiseLast;
+
   void OnCollisionEnter2D(Collision2D c)
   {
-    if (_IsDead) return;
+    if (_IsDead)
+      return;
     if (c.transform.parent.gameObject.name.Equals("Tower"))
     {
       if (_EnemyType == EnemyType.CRATE && GameScript.StateAtPlay())
       {
         Die();
+
+        var incrementAmount = Shop.GetUpgradeCount(Shop.UpgradeType.CRATE_INCREMENT) * 5;
+        if (incrementAmount > 0)
+          Shop.IncrementUpgrades(incrementAmount);
         return;
       }
       PlayerScript.s_Singleton.Hit();
-      if (GameScript.StateAtPlay()) Die(false);
+      if (GameScript.StateAtPlay())
+        Die(false);
     }
 
-    if (c.gameObject.name.Equals("Arrow")) return;
+    if (c.gameObject.name.Equals("Arrow"))
+      return;
 
     if (c.gameObject.name.Equals("Ground"))
     {
@@ -581,36 +691,42 @@ public class EnemyScript : MonoBehaviour
         enemyName = "Enemy16";
         break;
       case (EnemyType.CRATE):
-        enemyName = "Crate";
+        // Check skill
+        var c = Shop.GetUpgradeCount(Shop.UpgradeType.CRATE_ARMOR);
+        var chance = c * 0.5f;
+        if (c > 0 && Random.value <= chance)
+          enemyName = "CrateArmored";
+        else
+          enemyName = "Crate";
         break;
       case (EnemyType.GROUND_SLIDE_SMALL):
         enemyName = (Mathf.RoundToInt(Random.value) == 0 ? "Enemy11" : "Enemy11.1");
-        spawnPos = spawnLine.position + new Vector3(-10f + Random.value * 7f, 0f, 0f);
+        spawnPos = spawnLine.position + new Vector3(-5f, 0f, 0f);
         spawnPos.y = -7.4f;
         break;
       case (EnemyType.GROUND_SLIDE_MEDIUM):
         enemyName = (Mathf.RoundToInt(Random.value) == 0 ? "Enemy15" : "Enemy15.1");
-        spawnPos = spawnLine.position + new Vector3(-10f + Random.value * 7f, 0f, 0f);
+        spawnPos = spawnLine.position + new Vector3(-5f, 0f, 0f);
         spawnPos.y = -7.4f;
         break;
       case (EnemyType.GROUND_SLIDE):
         enemyName = (Mathf.RoundToInt(Random.value) == 0 ? "Enemy9" : "Enemy9.1");
-        spawnPos = spawnLine.position + new Vector3(-10f + Random.value * 7f, 0f, 0f);
+        spawnPos = spawnLine.position + new Vector3(-5f, 0f, 0f);
         spawnPos.y = -7.4f;
         break;
       case (EnemyType.GROUND_SLIDE_TOP):
         enemyName = "Enemy19";
-        spawnPos = spawnLine.position + new Vector3(-10f + Random.value * 7f, 0f, 0f);
+        spawnPos = spawnLine.position + new Vector3(-5f, 0f, 0f);
         spawnPos.y = -7.4f;
         break;
       case (EnemyType.GROUND_SLIDE_CASTLE):
         enemyName = "Enemy22";
-        spawnPos = spawnLine.position + new Vector3(-10f + Random.value * 7f, 0f, 0f);
+        spawnPos = spawnLine.position + new Vector3(-5f, 0f, 0f);
         spawnPos.y = -7.4f;
         break;
       case (EnemyType.GROUND_TOTEM_5):
         enemyName = (Mathf.RoundToInt(Random.value) == 0 ? "Enemy17" : "Enemy18");
-        spawnPos = spawnLine.position + new Vector3(-10f + Random.value * 7f, 0f, 0f);
+        spawnPos = spawnLine.position + new Vector3(-5f, 0f, 0f);
         spawnPos.y = -7.4f;
         break;
       case (EnemyType.BOSS):
@@ -627,7 +743,15 @@ public class EnemyScript : MonoBehaviour
 
     enemy.name = enemyName;
     enemy.transform.parent = GameObject.Find("Alive").transform;
-    enemy.transform.position = (spawnPos == Vector3.zero ? new Vector3(GameResources.s_Instance._SpawnLine.position.x - 8f + Random.Range(-1f, 1f), 17f + Random.Range(0f, 2f), 0f) : spawnPos);
+    enemy.transform.position = (
+        spawnPos == Vector3.zero
+            ? new Vector3(
+                GameResources.s_Instance._SpawnLine.position.x - 8f + Random.Range(-1f, 1f),
+                17f + Random.Range(0f, 2f),
+                0f
+            )
+            : spawnPos
+    );
     var script = enemy.GetComponent<EnemyScript>();
 
     // Init enemy script
@@ -639,7 +763,8 @@ public class EnemyScript : MonoBehaviour
 
   void DropLoot()
   {
-    if (!_CanDropLoot) return;
+    if (!_CanDropLoot)
+      return;
 
     // Decide drop
     var numCoins = 0;
@@ -708,19 +833,52 @@ public class EnemyScript : MonoBehaviour
 
   IEnumerator DropCoins(int coins)
   {
-    float timer = 0.2f / ((float)coins / 5f);
-    while (coins-- > 0)
+    coins = Mathf.RoundToInt(coins * PlayerScript.s_Combo);
+    var timer = 0.15f / ((float)coins / 8f);
+    var coinAmount = 1;// Mathf.Clamp((int)(0.15f * coins), 1, 10000);
+    var coinIter = 0;
+    var audio = GameResources.s_Instance._AudioCoinDrop;
+    var coinRange = 0.5f;
+    switch (_EnemyType)
+    {
+      case EnemyType.GROUND_ROLL_SMALL:
+        coinRange = 0.25f;
+        break;
+
+      case EnemyType.GROUND_ROLL_ARMOR_8:
+        coinRange = 1f;
+        break;
+
+      case EnemyType.GROUND_SLIDE_SMALL:
+      case EnemyType.GROUND_SLIDE:
+      case EnemyType.GROUND_SLIDE_MEDIUM:
+      case EnemyType.GROUND_SLIDE_TOP:
+        coinRange = 2f;
+        break;
+    }
+    while (coins > 0)
     {
       // Give coins
-      PlayerScript.GiveCoins(1);
+      for (var i = 0; i < coinAmount && coins > 0; i++)
+      {
+        coins--;
 
-      var particles = GameResources.s_Instance._ParticlesCoins;
-      var emitParams = new ParticleSystem.EmitParams();
-      emitParams.position = transform.position;
-      particles.Emit(emitParams, 1);
+        PlayerScript.GiveCoins(1);
 
-      var audio = GameResources.s_Instance._AudioCoinDrop;
-      audio.PlayOneShot(audio.clip);
+        var particles = GameResources.s_Instance._ParticlesCoins;
+        var emitParams = new ParticleSystem.EmitParams();
+        if (coinAmount > 1)
+        {
+          emitParams.position = transform.position + new Vector3(Random.Range(-coinRange, coinRange), 0f, 0f);
+        }
+        else
+          emitParams.position = transform.position;
+        particles.Emit(emitParams, 1);
+      }
+
+
+      if (coinIter++ % 6 == 0)
+        audio.PlayOneShot(audio.clip);
 
       yield return new WaitForSeconds(timer);
     }
