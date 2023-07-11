@@ -75,8 +75,6 @@ public class ArrowScript : MonoBehaviour
     _upgradeModifiers.Add(upgradeType);
   }
 
-  public void ttest() { }
-
   // Pirce
   public void ActivatePierce()
   {
@@ -88,8 +86,9 @@ public class ArrowScript : MonoBehaviour
       transform.GetChild(0).GetComponent<BoxCollider2D>().isTrigger = true;
 
       // Check scale
-      var scaleMod = 1f + Mathf.Clamp(Shop.GetUpgradeCount(Shop.UpgradeType.ARROW_PENETRATION) - 1, 0, 1000) * 1f;
-      if(scaleMod != 1f){
+      var scaleMod = 1f + Mathf.Clamp(Shop.GetUpgradeCount(Shop.UpgradeType.ARROW_PENETRATION) - 1, 0, 1000) * 2f;
+      if (scaleMod != 1f)
+      {
         transform.localScale *= scaleMod;
       }
     }
@@ -115,6 +114,11 @@ public class ArrowScript : MonoBehaviour
       current.Play();
   }
 
+  void OnCollisionAny()
+  {
+    //LightningManager.QueueLightning(transform.position.x);
+  }
+
   float _lastWoodSfx,
       _lastStoneSfx;
 
@@ -124,11 +128,13 @@ public class ArrowScript : MonoBehaviour
     if (c.isTrigger)
       return;
 
+    OnCollisionAny();
+
     // Check out of bounds
-    if (c.gameObject.name.Equals("Ground") || c.gameObject.name.Equals("Barrier"))
+    if (/*c.gameObject.name.Equals("Ground") || */c.gameObject.name.Equals("Barrier"))
     {
       Destroy(_rb);
-      transform.position += 1.5f * transform.right;
+      transform.position += 1.5f * transform.right + -1f * transform.up;
       CleanUp();
       return;
     }
@@ -174,8 +180,12 @@ public class ArrowScript : MonoBehaviour
       else
       {
         _lastStoneSfx = Time.time;
-        sfx = GameResources.s_Instance._AudioSfxWood;
+        sfx = GameResources.s_Instance._AudioSfxStone;
       }
+    }
+    else if (c.transform.parent.gameObject.name.Equals("Balloon"))
+    {
+      sfx = null;
     }
     if (sfx != null)
       SetAndPlay(_audioPlayer1, sfx, 0.8f, 1.8f, true);
@@ -208,27 +218,35 @@ public class ArrowScript : MonoBehaviour
       return;
     _triggered = true;
 
+    OnCollisionAny();
+
     // Check materials
     var comboDelta = 0f;
+    var isBalloon = false;
     AudioSource hitNoise = null;
     if (c.gameObject.name.Equals("Wood"))
     {
       hitNoise = GameResources.s_Instance._AudioSfxWood;
       comboDelta -= PlayerScript._COMBO_REMOVE;
     }
-    if (c.gameObject.name.Equals("Armor"))
+    else if (c.gameObject.name.Equals("Armor"))
     {
       hitNoise = GameResources.s_Instance._AudioSfxMetal;
       comboDelta += PlayerScript._COMBO_ADD;
     }
-    if (c.gameObject.name.Equals("Stone"))
+    else if (c.gameObject.name.Equals("Stone"))
     {
       hitNoise = GameResources.s_Instance._AudioSfxStone;
       comboDelta -= PlayerScript._COMBO_REMOVE;
     }
+    else if (c.transform.parent.gameObject.name.Equals("Balloon"))
+    {
+      isBalloon = true;
+    }
     if (hitNoise != null)
+    {
       SetAndPlay(_audioPlayer1, hitNoise, 0.8f, 1.6f);
-
+    }
     // Destroy Physics components
     if (transform != null)
     {
@@ -237,7 +255,11 @@ public class ArrowScript : MonoBehaviour
     }
 
     // Move with collider
-    if (c.gameObject.name == "Armor" || c.transform.GetComponent<Rigidbody2D>() != null)
+    if (isBalloon)
+    {
+      GetComponent<MeshRenderer>().enabled = false;
+    }
+    else if (c.gameObject.name == "Armor" || c.transform.GetComponent<Rigidbody2D>() != null)
     {
       transform.parent = c.transform;
     }
@@ -284,7 +306,7 @@ public class ArrowScript : MonoBehaviour
           PlayerScript.AddCombo(PlayerScript._COMBO_ADD);
       }
     }
-    else
+    else if(hitNoise == null)
     {
       SetAndPlay(_audioPlayer1, GameResources.s_Instance._AudioSfxGround, 0.8f, 1.6f);
     }
@@ -329,6 +351,46 @@ public class ArrowScript : MonoBehaviour
     }
     StartCoroutine(CleanUpCo());
   }
+
+
+  // Lightning power
+  public static class LightningManager
+  {
+
+    public static ParticleSystem s_Particles { get { return GameResources.s_Instance._Lightning; } }
+
+    static Queue<float> s_lightningQueue;
+
+    public static void Init()
+    {
+      s_lightningQueue = new Queue<float>();
+    }
+
+    public static void Update()
+    {
+
+      if (s_lightningQueue.Count > 0)
+      {
+
+        if (s_Particles.isEmitting) return;
+
+        var lightningPos = s_lightningQueue.Dequeue();
+
+        var pos = s_Particles.transform.position;
+        pos.x = lightningPos;
+        s_Particles.transform.position = pos;
+
+        s_Particles.Play();
+      }
+
+    }
+
+    public static void QueueLightning(float xPos)
+    {
+      s_lightningQueue.Enqueue(xPos);
+    }
+  }
+
 }
 
 

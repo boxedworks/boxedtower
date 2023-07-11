@@ -22,11 +22,24 @@ static public class Shop
 
     ARROW_STRENGTH,
     AMMO_MAX,
+
+    PROJECTILE_AMOUNT,
+    PROJECTILE_SIZE,
+
     HEALTH,
+    HEALTH_UPGRADES,
+
+    ARROW_NOTCH,
+
+    SLOMO_INCREASE,
 
     CRATE_ARMOR,
     CRATE_INCREMENT,
     ENEMY_SIZED,
+
+    TOWER2,
+    TOWER2_RATE,
+    TOWER2_PLAYERSHOOT,
   }
 
   struct Upgrade
@@ -67,9 +80,18 @@ static public class Shop
         Debug.LogWarning(
             $"Invalid index ({index} / {costs.Length}) for {_Type}, realcostiter? {_GetRealCostIter != null}"
         );
-        return 0;
+        return -1;
       }
-      return costs[index];
+
+      var cost = costs[index];
+
+      // Check special case
+      if (_CountUpgrade != UpgradeType.NONE && index == 0)
+      {
+        cost += 500 * GameScript.s_NumActiveSkillsBought + Mathf.Clamp(250 * (GameScript.s_NumActiveSkillsBought - 1), 0, 10000);
+      }
+
+      return cost;
     }
 
     public int GetRealCount()
@@ -83,9 +105,11 @@ static public class Shop
   {
     public UpgradeType _UpgradeType;
     public int[] _Costs;
-    public System.Func<int, string> _DescriptionFunction;
+    public System.Func<int, string> _ShopDescriptionFunction;
+    public System.Action<int> _StatDescriptionFunction;
     public int _MaxPurchases;
     public int _StartCount;
+    public int _CountIncrement;
     public (UpgradeType, int)[] _UpgradeUnlocks;
   }
 
@@ -94,6 +118,7 @@ static public class Shop
   static UpgradeType[] s_upgradesActive;
   static Dictionary<UpgradeType, UpgradeDefinition> s_upgradeDefinitions;
   static List<UpgradeType> s_shopSelections;
+  static Dictionary<UpgradeType, Dictionary<UpgradeType, string>> s_upgradeStats;
 
   // Load upgrades for a run / save
   public static void Load()
@@ -175,7 +200,10 @@ static public class Shop
     {
       if (u._Counters == null)
         return u;
-      u._Count = GetUpgradeCountMax(u._Type) - 1;
+
+      var deinc = s_upgradeDefinitions[u._Type]._CountIncrement;
+      u._Count = GetUpgradeCountMax(u._Type) - deinc;
+
       return u;
     };
     UpdateFunction_RemoveMaxPurchases = (Upgrade u) =>
@@ -185,6 +213,7 @@ static public class Shop
       if (countStart == -1)
         countStart = 0;
       var maxPurchases = GetMaxPurchases(u._Type);
+      //Debug.Log($"Checking {u._Type} from shop count ({count}) start ({countStart}) maxPurchases ({maxPurchases})");
       if (maxPurchases != 0 && count >= maxPurchases)
       {
         s_shopSelections.Remove(u._Type);
@@ -229,8 +258,7 @@ static public class Shop
                     counterUpgrade,
                     (Upgrade su) =>
                     {
-                      var countStart = GetCountStart(counterUpgrade);
-                      su._Count = countStart;
+                      su._Count = GetCountStart(counterUpgrade);
                       return su;
                     }
                   );
@@ -270,7 +298,7 @@ static public class Shop
     // Descs
     string GetActiveSkillDesc(string skillName, string desc, int count)
     {
-      return @$"<b><color=yellow>Unlock: [{skillName}]</color></b>
+      return @$"<b><color=yellow>Skill Unlock: [{skillName}]</color></b>
 ====================
 
 <color=grey>Desc:</color> {desc}
@@ -281,7 +309,7 @@ static public class Shop
 
     string GetPassiveSkillDesc(string skillName, string desc)
     {
-      return @$"<b><color=yellow>Unlock: [{skillName}]</color></b>
+      return @$"<b><color=yellow>Skill Unlock: [{skillName}]</color></b>
 ====================
 
 <color=grey>Desc:</color> {desc}
@@ -299,18 +327,49 @@ static public class Shop
 {c0} -> {c1}";
     }
 
+    string GetUpgradeDescSimple(string name, string desc, string subName = "")
+    {
+      return @$"<b><color=green>Upgrade: [{name}] {subName}</color></b>
+====================
+
+{desc}";
+    }
+
+    // Register stat desc
+    s_upgradeStats = new Dictionary<UpgradeType, Dictionary<UpgradeType, string>>();
+    void RegisterStatDesc(UpgradeType upgradeTypeMeta, UpgradeType upgradeTypeSub, string desc)
+    {
+      if (!s_upgradeStats.ContainsKey(upgradeTypeMeta))
+        s_upgradeStats.Add(upgradeTypeMeta, new Dictionary<UpgradeType, string>());
+      if (!s_upgradeStats[upgradeTypeMeta].ContainsKey(upgradeTypeSub))
+        s_upgradeStats[upgradeTypeMeta].Add(upgradeTypeSub, desc);
+      else
+        s_upgradeStats[upgradeTypeMeta][upgradeTypeSub] = desc;
+    }
+    void RegisterStatDescMeta(UpgradeType upgradeTypeMeta, int upgradeLevel, string upgradeName, string desc)
+    {
+      RegisterStatDesc(upgradeTypeMeta, UpgradeType.NONE, @$"[{upgradeLevel}/{Mathf.CeilToInt(s_upgradeDefinitions[upgradeTypeMeta]._MaxPurchases / (float)s_upgradeDefinitions[upgradeTypeMeta]._CountIncrement)}] <color=grey>{upgradeName}</color> - {desc}");
+    }
+    void RegisterStatDescSub(UpgradeType upgradeTypeMeta, UpgradeType upgradeTypeSub, int upgradeLevel, string upgradeName, string desc)
+    {
+      RegisterStatDesc(upgradeTypeMeta, upgradeTypeSub, @$"[{upgradeLevel}/{Mathf.CeilToInt(s_upgradeDefinitions[upgradeTypeSub]._MaxPurchases / (float)s_upgradeDefinitions[upgradeTypeSub]._CountIncrement)}] <color=grey>{upgradeName}</color> - {desc}");
+    }
+
     // Super function
     s_upgradeDefinitions = new Dictionary<UpgradeType, UpgradeDefinition>();
     void RegisterUpgradeDefinition(
         UpgradeType upgradeType,
         int[] costs,
-        System.Func<int, string> descriptionFunction,
+        System.Func<int, string> shopDescriptionFunction,
+        System.Action<int> statDescriptionFunction,
         int start_count = -1,
         (UpgradeType, int)[] unlocks = null,
         int max_purchases = -1,
 
         bool increment_on_purchase = true,
-        bool remove_on_max_purchase = true
+        bool remove_on_max_purchase = true,
+
+        int countIncrement = 1
     )
     {
       // Append to dict
@@ -320,10 +379,12 @@ static public class Shop
           {
             _UpgradeType = upgradeType,
             _Costs = costs,
-            _DescriptionFunction = descriptionFunction,
-            _MaxPurchases = max_purchases == -1 ? costs.Length : max_purchases,
+            _ShopDescriptionFunction = shopDescriptionFunction,
+            _StatDescriptionFunction = statDescriptionFunction,
+            _MaxPurchases = max_purchases == -1 ? (costs[0] == 0 ? costs.Length - 1 : costs.Length) : max_purchases,
             _StartCount = start_count,
-            _UpgradeUnlocks = unlocks
+            _UpgradeUnlocks = unlocks,
+            _CountIncrement = countIncrement
           }
       );
 
@@ -341,6 +402,18 @@ static public class Shop
         upgrade._OnPurchase += purchaseFunctions;
         s_upgrades[upgradeType] = upgrade;
       }
+
+      /*/ Set stat desc on purchase
+      UpdateUpgrade(upgradeType, (Upgrade u) =>
+      {
+
+        u._OnPurchase += (UpgradeType upgradeType0) =>
+        {
+          s_upgradeDefinitions[upgradeType0]._StatDescriptionFunction?.Invoke(s_upgrades[upgradeType0].GetRealCount());
+        };
+
+        return u;
+      });*/
 
       // Remove on max purchase
       if (remove_on_max_purchase)
@@ -387,28 +460,34 @@ static public class Shop
             });
         }
       }
+
     }
 
     // Active upgrades
     LinkActiveUpgrade(UpgradeType.TRI_SHOT, UpgradeType.TRI_SHOT_COUNTER);
     RegisterUpgradeDefinition(
         UpgradeType.TRI_SHOT,
-        new int[] { 250, 2000 },
+        new int[] { 250, 1000, 2050 },
         (int upgradeLevel) =>
         {
           return upgradeLevel == 0
             ? GetActiveSkillDesc(
-                "Split Shot",
-                "Fire multiple (3) arrows at once",
-                GetCountStart(UpgradeType.TRI_SHOT_COUNTER)
+              "Split Shot",
+              "Fire multiple (3) arrows at once",
+              GetCountStart(UpgradeType.TRI_SHOT_COUNTER)
             )
             : GetUpgradeDesc(
-                "Split Shot",
-                "Increased number of arrows",
-                $"{3 + (upgradeLevel - 1) * 2}",
-                $"{3 + (upgradeLevel) * 2}",
-                "projectiles"
+              "Split Shot",
+              "Increased number of arrows",
+              $"{3 + (upgradeLevel - 1) * 2}",
+              $"{3 + (upgradeLevel) * 2}",
+              "projectiles"
             );
+        },
+        (int upgradeLevel) =>
+        {
+          var preprogress = upgradeLevel == 1 ? "" : "3 => ";
+          RegisterStatDescMeta(UpgradeType.TRI_SHOT, upgradeLevel, "Split Shot", $"Fire multiple ({preprogress}{3 + (upgradeLevel - 1) * 2}) arrows");
         }
     );
 
@@ -420,56 +499,79 @@ static public class Shop
           return GetUpgradeDesc(
             "Split Shot",
             "Decrease cooldown",
+            $"{GetCountStart(UpgradeType.TRI_SHOT_COUNTER) - s_upgrades[UpgradeType.TRI_SHOT_COUNTER].GetRealCount() + 1}",
             $"{GetCountStart(UpgradeType.TRI_SHOT_COUNTER) - s_upgrades[UpgradeType.TRI_SHOT_COUNTER].GetRealCount()}",
-            $"{GetCountStart(UpgradeType.TRI_SHOT_COUNTER) - s_upgrades[UpgradeType.TRI_SHOT_COUNTER].GetRealCount() - 1}",
             "cooldown"
           );
         },
-        15
+        (int upgradeLevel) =>
+        {
+          var preprogress = upgradeLevel == 1 ? "" : $"{s_upgradeDefinitions[UpgradeType.TRI_SHOT_COUNTER]._StartCount} => ";
+          RegisterStatDescSub(UpgradeType.TRI_SHOT, UpgradeType.TRI_SHOT_COUNTER, upgradeLevel - 1, "Cooldown", $"{preprogress}{s_upgrades[UpgradeType.TRI_SHOT_COUNTER]._Counters.Length} kills");
+        },
+        15,
+        null,
+        -1,
+        false
     );
 
     LinkActiveUpgrade(UpgradeType.ARROW_RAIN, UpgradeType.ARROW_RAIN_COUNTER);
     RegisterUpgradeDefinition(
       UpgradeType.ARROW_RAIN,
-      new int[] { 400, 1000, 2500 },
-        (int upgradeLevel) =>
-        {
-          return upgradeLevel == 0
-            ? GetActiveSkillDesc(
-                "Arrow Rain",
-                "Arrows (10) rain from the sky at a marked position",
-                GetCountStart(UpgradeType.ARROW_RAIN_COUNTER)
-            )
-            : GetUpgradeDesc(
-                "Arrow Rain",
-                "Increased number of arrows",
-                $"{10 + (upgradeLevel - 1) * 5}",
-                $"{10 + (upgradeLevel) * 5}",
-                "projectiles"
-            );
-        }
+      new int[] { 250, 1000, 2250 },
+      (int upgradeLevel) =>
+      {
+        return upgradeLevel == 0
+          ? GetActiveSkillDesc(
+            "Arrow Rain",
+            "Arrows (10) rain from the sky at a marked position",
+            GetCountStart(UpgradeType.ARROW_RAIN_COUNTER)
+          )
+          : GetUpgradeDesc(
+            "Arrow Rain",
+            "Increased number of arrows",
+            $"{10 + (upgradeLevel - 1) * 5}",
+            $"{10 + (upgradeLevel) * 5}",
+            "projectiles"
+          );
+      },
+      (int upgradeLevel) =>
+      {
+        var preprogress = upgradeLevel == 1 ? "" : "10 => ";
+        RegisterStatDescMeta(UpgradeType.ARROW_RAIN, upgradeLevel, "Arrow Rain", $"Arrows ({preprogress}{10 + (upgradeLevel - 1) * 5}) rain from the sky at a marked position");
+      }
     );
 
     RegisterUpgradeDefinition(
       UpgradeType.ARROW_RAIN_COUNTER,
-      new int[] { 0, 450, 800, 1250, 2000 },
+      new int[] { 0, 450, 0, 1250, 0, 2000 },
       (int upgradeLevel) =>
       {
         return GetUpgradeDesc(
           "Arrow Rain",
           "Decrease cooldown",
-            $"{GetCountStart(UpgradeType.ARROW_RAIN_COUNTER) - s_upgrades[UpgradeType.ARROW_RAIN_COUNTER].GetRealCount()}",
+            $"{GetCountStart(UpgradeType.ARROW_RAIN_COUNTER) - s_upgrades[UpgradeType.ARROW_RAIN_COUNTER].GetRealCount() + 1}",
             $"{GetCountStart(UpgradeType.ARROW_RAIN_COUNTER) - s_upgrades[UpgradeType.ARROW_RAIN_COUNTER].GetRealCount() - 1}",
           "cooldown"
         );
       },
-      30
+      (int upgradeLevel) =>
+      {
+        var preprogress = upgradeLevel == 1 ? "" : $"{s_upgradeDefinitions[UpgradeType.ARROW_RAIN_COUNTER]._StartCount} => ";
+        RegisterStatDescSub(UpgradeType.ARROW_RAIN, UpgradeType.ARROW_RAIN_COUNTER, upgradeLevel / 2, "Cooldown", $"{preprogress}{s_upgrades[UpgradeType.ARROW_RAIN_COUNTER]._Counters.Length} kills");
+      },
+      30,
+      null,
+      -1,
+      false,
+      true,
+      2
     );
 
     LinkActiveUpgrade(UpgradeType.ARROW_PENETRATION, UpgradeType.ARROW_PENETRATION_COUNTER);
     RegisterUpgradeDefinition(
       UpgradeType.ARROW_PENETRATION,
-      new int[] { 350, 700, 1250 },
+      new int[] { 250, 700, 1250 },
       (int upgradeLevel) =>
       {
         return upgradeLevel == 0
@@ -481,10 +583,15 @@ static public class Shop
           : GetUpgradeDesc(
             "Pierce Shot",
             "Increased projectile size",
-            $"{(upgradeLevel - 1) * 100}%",
-            $"{(upgradeLevel) * 100}%",
+            $"{100 + (upgradeLevel - 1) * 200}%",
+            $"{100 + (upgradeLevel) * 200}%",
             "size"
           );
+      },
+      (int upgradeLevel) =>
+      {
+        var preprogress = upgradeLevel == 1 ? "" : $"larger (100% => {100 + (upgradeLevel - 1) * 200}%) ";
+        RegisterStatDescMeta(UpgradeType.ARROW_PENETRATION, upgradeLevel, "Pierce Shot", $"Fire a {preprogress}piercing arrow");
       }
     );
 
@@ -496,18 +603,31 @@ static public class Shop
         return GetUpgradeDesc(
           "Piece Shot",
           "Decrease cooldown",
+            $"{GetCountStart(UpgradeType.ARROW_PENETRATION_COUNTER) - s_upgrades[UpgradeType.ARROW_PENETRATION_COUNTER].GetRealCount() + 1}",
             $"{GetCountStart(UpgradeType.ARROW_PENETRATION_COUNTER) - s_upgrades[UpgradeType.ARROW_PENETRATION_COUNTER].GetRealCount()}",
-            $"{GetCountStart(UpgradeType.ARROW_PENETRATION_COUNTER) - s_upgrades[UpgradeType.ARROW_PENETRATION_COUNTER].GetRealCount() - 1}",
           "cooldown"
         );
       },
-      15
+      (int upgradeLevel) =>
+      {
+        var preprogress = upgradeLevel == 1 ? "" : $"{s_upgradeDefinitions[UpgradeType.ARROW_PENETRATION_COUNTER]._StartCount} => ";
+        RegisterStatDescSub(UpgradeType.ARROW_PENETRATION, UpgradeType.ARROW_PENETRATION_COUNTER, upgradeLevel - 1, "Cooldown", $"{preprogress}{s_upgrades[UpgradeType.ARROW_PENETRATION_COUNTER]._Counters.Length} kills");
+      },
+      20,
+      null,
+      -1,
+      false
     );
 
     // Backup archer
+    UpdateUpgrade(UpgradeType.BACKUP_ARCHER, (Upgrade u) =>
+    {
+      u._CountUpgrade = UpgradeType.BACKUP_ARCHER;
+      return u;
+    });
     RegisterUpgradeDefinition(
       UpgradeType.BACKUP_ARCHER,
-      new int[] { 300, 650, 1000, 1500, 2500 },
+      new int[] { 250, 650, 1000, 1500, 2500 },
       (int upgradeLevel) =>
       {
         return upgradeLevel == 0
@@ -523,6 +643,11 @@ static public class Shop
             "chance"
           );
       },
+      (int upgradeLevel) =>
+      {
+        var preprogress = upgradeLevel == 1 ? "" : $"20% => ";
+        RegisterStatDescMeta(UpgradeType.BACKUP_ARCHER, upgradeLevel, "Backup Archer", $"Increasing the combo meter has a chance ({preprogress}{upgradeLevel * 20}%) to randomly fire an arrow");
+      },
       -1,
       new (UpgradeType, int)[] { (UpgradeType.BACKUP_ARCHER_PROJECTILES, 1) }
     );
@@ -537,8 +662,140 @@ static public class Shop
           "On fire, chance to spawn a 2nd arrow",
           $"{upgradeLevel * 10}%",
           $"{(upgradeLevel + 1) * 10}%",
-          "projectiles"
+          "volley"
         );
+      },
+      (int upgradeLevel) =>
+      {
+        var preprogress = upgradeLevel == 1 ? "" : $"10% => ";
+        RegisterStatDescSub(UpgradeType.BACKUP_ARCHER, UpgradeType.BACKUP_ARCHER_PROJECTILES, upgradeLevel, "Volley", $"On fire, chance ({preprogress}{upgradeLevel * 10}%) to spawn a 2nd arrow");
+      }
+    );
+
+    // Tower 2
+    UpdateUpgrade(UpgradeType.TOWER2, (Upgrade u) =>
+    {
+      u._CountUpgrade = UpgradeType.TOWER2;
+
+      //
+      u._OnPurchase += (UpgradeType upgradeType) =>
+      {
+
+        if (s_upgrades[upgradeType]._Count == 1)
+        {
+          PlayerScript.Tower2GainHealth();
+        }
+
+      };
+
+      return u;
+    });
+    RegisterUpgradeDefinition(
+      UpgradeType.TOWER2,
+      new int[] { 250, 650, 1000, 1500, 2500 },
+      (int upgradeLevel) =>
+      {
+        return upgradeLevel == 0
+          ? GetPassiveSkillDesc(
+            "Defense Tower",
+            $"Build a tower that periodically ({PlayerScript._UpgradeFunction_tower2Rate.Invoke(1)}s) shoots an arrow at the closest enemy"
+          )
+          : GetUpgradeDesc(
+            "Defense Tower",
+            "Increased fire rate",
+            $"{PlayerScript._UpgradeFunction_tower2Rate.Invoke(upgradeLevel)}s",
+            $"{PlayerScript._UpgradeFunction_tower2Rate.Invoke(upgradeLevel + 1)}s",
+            "rate"
+          );
+      },
+      (int upgradeLevel) =>
+      {
+        var preprogress = upgradeLevel == 1 ? "" : $"{PlayerScript._UpgradeFunction_tower2Rate.Invoke(1)}s => ";
+        RegisterStatDescMeta(UpgradeType.TOWER2, upgradeLevel, "Defense Tower", $"Build a tower that periodically ({preprogress}{PlayerScript._UpgradeFunction_tower2Rate.Invoke(upgradeLevel)}s) shoots an arrow at the closest enemy");
+      },
+      -1,
+      new (UpgradeType, int)[]
+      {
+        (UpgradeType.TOWER2_RATE, 1),
+        (UpgradeType.TOWER2_PLAYERSHOOT, 1),
+      }
+    );
+    GameResources.s_Instance._SliderTower2UI.gameObject.SetActive(false);
+    if (GameObject.Find("Tower2").transform.position.y > 6f)
+      PlayerScript.Tower2LoseHealth();
+
+    RegisterUpgradeDefinition(
+      UpgradeType.TOWER2_RATE,
+      new int[] { 500, 1100, 1500 },
+      (int upgradeLevel) =>
+      {
+        return GetUpgradeDesc(
+          "Defense Tower",
+          "On kill, add to skill timer",
+          $"{upgradeLevel * 1f}s",
+          $"{(upgradeLevel + 1) * 1f}s",
+          "rally"
+        );
+      },
+      (int upgradeLevel) =>
+      {
+        var preprogress = upgradeLevel == 1 ? "" : $"1s => ";
+        RegisterStatDescSub(UpgradeType.TOWER2, UpgradeType.TOWER2_RATE, upgradeLevel, "Rally", $"On kill, add ({preprogress}{upgradeLevel * 1f}s) to skill timer");
+      }
+    );
+
+    RegisterUpgradeDefinition(
+      UpgradeType.TOWER2_PLAYERSHOOT,
+      new int[] { 500, 1100, 1500 },
+      (int upgradeLevel) =>
+      {
+        return GetUpgradeDesc(
+          "Defense Tower",
+          "Each ammo used adds to skill timer",
+          $"{upgradeLevel * 0.5f}s",
+          $"{(upgradeLevel + 1) * 0.5f}s",
+          "support"
+        );
+      },
+      (int upgradeLevel) =>
+      {
+        var preprogress = upgradeLevel == 1 ? "" : $"0.5s => ";
+        RegisterStatDescSub(UpgradeType.TOWER2, UpgradeType.TOWER2_PLAYERSHOOT, upgradeLevel, "Support", $"Each ammo used adds ({preprogress}{upgradeLevel * 0.5f}s) to skill timer");
+      }
+    );
+
+    // Projectile
+    RegisterUpgradeDefinition(
+      UpgradeType.PROJECTILE_AMOUNT,
+      new int[] { 1250 },
+      (int upgradeLevel) =>
+      {
+        return GetUpgradeDescSimple(
+          "Barrage",
+          "Fully notching your arrow shoots +1 projectile and +1 ammo cost"
+        );
+      },
+      (int upgradeLevel) =>
+      {
+        RegisterStatDescMeta(UpgradeType.PROJECTILE_AMOUNT, upgradeLevel, "Barrage", $"Fully notching your arrow shoots +1 projectile and +1 ammo cost");
+      }
+    );
+    RegisterUpgradeDefinition(
+      UpgradeType.PROJECTILE_SIZE,
+      new int[] { 550, 1100 },
+      (int upgradeLevel) =>
+      {
+        return GetUpgradeDesc(
+          "Larger Arrows",
+          "All projectiles increased size",
+          $"{upgradeLevel * 75f}%",
+          $"{(upgradeLevel + 1) * 75f}%"
+        );
+      },
+      (int upgradeLevel) =>
+      {
+        var preprogress = upgradeLevel == 1 ? "" : $"+0% => ";
+        RegisterStatDescMeta(UpgradeType.PROJECTILE_SIZE, upgradeLevel, "Larger Arrows", $"All projectiles increased ({preprogress}+{upgradeLevel * 75f}%) size");
       }
     );
 
@@ -554,6 +811,11 @@ static public class Shop
           $"+{upgradeLevel * 10}%",
           $"+{(upgradeLevel + 1) * 10}%"
         );
+      },
+      (int upgradeLevel) =>
+      {
+        var preprogress = upgradeLevel == 1 ? "" : $"0.5s => ";
+        RegisterStatDescMeta(UpgradeType.ARROW_STRENGTH, upgradeLevel, "Arrow Strength", $"Each ammo used adds ({preprogress}{upgradeLevel * 0.5f}s) to skill timer");
       }
     );
 
@@ -565,10 +827,75 @@ static public class Shop
       {
         return GetUpgradeDesc(
           "Growth Ray",
-          "Smallest enemies are larger",
+          "Smallest enemies have increased size",
           $"+{upgradeLevel * 30}%",
           $"+{(upgradeLevel + 1) * 30}%"
         );
+      },
+      (int upgradeLevel) =>
+      {
+        var preprogress = upgradeLevel == 1 ? "" : $"+0% => ";
+        RegisterStatDescMeta(UpgradeType.ENEMY_SIZED, upgradeLevel, "Growth Ray", $"Smallest enemies have increased ({preprogress}+{upgradeLevel * 30}%) size");
+      }
+    );
+
+    // Health upgrades
+    RegisterUpgradeDefinition(
+      UpgradeType.HEALTH_UPGRADES,
+      new int[] { 750, 1500 },
+      (int upgradeLevel) =>
+      {
+        return GetUpgradeDesc(
+          "Reactive Armor",
+          "On losing health, decrease cooldowns of all skills by a %",
+          $"-{upgradeLevel * 50}%",
+          $"-{(upgradeLevel + 1) * 50}%"
+        );
+      },
+      (int upgradeLevel) =>
+      {
+        var preprogress = upgradeLevel == 1 ? "" : $"-0% => ";
+        RegisterStatDescMeta(UpgradeType.HEALTH_UPGRADES, upgradeLevel, "Reactive Armor", $"On losing health, decrease cooldowns of all skills by a % ({preprogress}-{upgradeLevel * 50}%)");
+      }
+    );
+
+    // Notch arrow
+    RegisterUpgradeDefinition(
+      UpgradeType.ARROW_NOTCH,
+      new int[] { 750, 1500, 2500 },
+      (int upgradeLevel) =>
+      {
+        return GetUpgradeDesc(
+          "Arrow Notch",
+          "Arrows notch faster",
+          $"+{upgradeLevel * 33}%",
+          $"+{(upgradeLevel + 1) * 33}%"
+        );
+      },
+      (int upgradeLevel) =>
+      {
+        var preprogress = upgradeLevel == 1 ? "" : $"+0% => ";
+        RegisterStatDescMeta(UpgradeType.ARROW_NOTCH, upgradeLevel, "Arrow Notch", $"Arrows notch faster ({preprogress}+{upgradeLevel * 33}%)");
+      }
+    );
+
+    // Slowmo
+    RegisterUpgradeDefinition(
+      UpgradeType.SLOMO_INCREASE,
+      new int[] { 750, 1750 },
+      (int upgradeLevel) =>
+      {
+        return GetUpgradeDesc(
+          "Meter Drain",
+          "The slow-mo meter decreases slower",
+          $"{100 + (upgradeLevel * -15)}%",
+          $"{100 + ((upgradeLevel + 1) * -15)}%"
+        );
+      },
+      (int upgradeLevel) =>
+      {
+        var preprogress = upgradeLevel == 1 ? "" : $"-100% => ";
+        RegisterStatDescMeta(UpgradeType.SLOMO_INCREASE, upgradeLevel, "Meter Drain", $"The slow-mo meter decreases slower ({preprogress}-{100 + (upgradeLevel * -15)}%)");
       }
     );
 
@@ -614,6 +941,7 @@ static public class Shop
           $"{PlayerScript.GetHealth() + 1}"
         );
       },
+      null,
 
       -1,
       null,
@@ -654,10 +982,17 @@ static public class Shop
         var playerAmmo = PlayerScript.GetAmmoMax();
         return GetUpgradeDesc(
           "Max Ammo",
-          "Max ammo count",
+          "Increased max ammo count",
           $"{playerAmmo}",
           $"{playerAmmo + 1}"
         );
+      },
+      (int upgradeLevel) =>
+      {
+        var playerAmmo = PlayerScript.GetAmmoMax();
+
+        var preprogress = upgradeLevel == 1 ? "" : $"{3} => ";
+        RegisterStatDescMeta(UpgradeType.AMMO_MAX, upgradeLevel, "Max Ammo", $"Increased ({preprogress}{playerAmmo}) max ammo count");
       },
 
       -1,
@@ -678,6 +1013,11 @@ static public class Shop
           $"{upgradeLevel * 50}%",
           $"{(upgradeLevel + 1) * 50}%"
         );
+      },
+      (int upgradeLevel) =>
+      {
+        var preprogress = upgradeLevel == 1 ? "" : $"0% => ";
+        RegisterStatDescMeta(UpgradeType.CRATE_ARMOR, upgradeLevel, "Crate Armor", $"Chance ({preprogress}{upgradeLevel * 50}%) for supply crates to spawn with armor");
       }
     );
 
@@ -693,6 +1033,11 @@ static public class Shop
           $"-{upgradeLevel * 5}",
           $"-{(upgradeLevel + 1) * 5}"
         );
+      },
+      (int upgradeLevel) =>
+      {
+        var preprogress = upgradeLevel == 1 ? "" : $"-0 => ";
+        RegisterStatDescMeta(UpgradeType.CRATE_INCREMENT, upgradeLevel, "Supply Crate", $"Receiving a crate decreases ({preprogress}-{upgradeLevel * 5}) all upgrade cooldowns");
       }
     );
 
@@ -709,7 +1054,7 @@ static public class Shop
       }
     }
 
-    // Add shop selections
+    // Add initial shop selections
     s_shopSelections = new List<UpgradeType>();
     foreach (
         var upgrade in new UpgradeType[]
@@ -717,12 +1062,22 @@ static public class Shop
           UpgradeType.TRI_SHOT,
           UpgradeType.ARROW_RAIN,
           UpgradeType.ARROW_PENETRATION,
+          UpgradeType.BACKUP_ARCHER,
+          UpgradeType.TOWER2,
 
           UpgradeType.ARROW_STRENGTH,
+          UpgradeType.ARROW_NOTCH,
           UpgradeType.AMMO_MAX,
-          UpgradeType.BACKUP_ARCHER,
+          UpgradeType.PROJECTILE_AMOUNT,
+          UpgradeType.PROJECTILE_SIZE,
+
           UpgradeType.CRATE_ARMOR,
           UpgradeType.CRATE_INCREMENT,
+
+          UpgradeType.ENEMY_SIZED,
+          UpgradeType.SLOMO_INCREASE,
+
+          UpgradeType.HEALTH_UPGRADES,
         }
     )
     {
@@ -788,22 +1143,22 @@ static public class Shop
   // Desc
   static string GetUpgradeDesc(UpgradeType upgradeType, int count)
   {
-    return s_upgradeDefinitions[upgradeType]._DescriptionFunction.Invoke(count);
+    return s_upgradeDefinitions[upgradeType]._ShopDescriptionFunction.Invoke(count);
   }
 
   //
-  public static bool TryPurchase(UpgradeType upgrade)
+  public static bool TryPurchase(UpgradeType upgradeType)
   {
-    Debug.Log($"Try purchase: {upgrade}");
-    var upgrade_data = s_upgrades[upgrade];
+    //Debug.Log($"Try purchase: {upgradeType}");
+    var upgrade_data = s_upgrades[upgradeType];
 
     // Check enough money
     var cost = upgrade_data.GetCurrentCost();
     var playerCoins = PlayerScript.GetCoins();
-    if (cost > playerCoins)
+    if (cost == -1 || cost > playerCoins)
       return false;
 
-    Debug.Log($"Purchased: {upgrade}");
+    //Debug.Log($"Purchased: {upgradeType}");
 
     // Decrease money
     PlayerScript.SetCoins(playerCoins - cost);
@@ -811,10 +1166,19 @@ static public class Shop
 
     // Check function
     s_saveCount = upgrade_data._Count;
-    upgrade_data._OnPurchase?.Invoke(upgrade);
+    upgrade_data._OnPurchase?.Invoke(upgradeType);
 
     // If active upgrade, place skill button
-    UpdateUpgradeUI(upgrade, upgrade_data._Active && upgrade_data._Counters != null);
+    UpdateUpgradeUI(upgradeType, upgrade_data._Active && upgrade_data._Counters != null);
+
+    // Set stat
+    s_upgradeDefinitions[upgradeType]._StatDescriptionFunction?.Invoke(s_upgrades[upgradeType].GetRealCount());
+
+    // Check active skill
+    if (upgrade_data._CountUpgrade != UpgradeType.NONE && s_upgrades[upgradeType]._Count == 1)
+    {
+      GameScript.s_NumActiveSkillsBought++;
+    }
 
     // Reload active upgrades / prices
     BufferActiveUpgrades();
@@ -823,11 +1187,64 @@ static public class Shop
     return true;
   }
 
-  static int s_saveCount;
-
-  static void UpdateUpgradeUI(UpgradeType upgrade, bool reset = false)
+  //
+  static List<string> s_skillStatsLines;
+  static int s_skillStatsLineStart;
+  public static void GenerateSkillStatsMenu()
   {
-    var upgrade_data = s_upgrades[upgrade];
+    // Gather all stat lines
+    s_skillStatsLines = new List<string>();
+    s_skillStatsLineStart = 0;
+    foreach (var entry in new List<UpgradeType>(s_upgradeStats.Keys))
+    {
+      // Concat base entry
+      if (!s_upgradeStats[entry].ContainsKey(UpgradeType.NONE)) continue;
+      s_skillStatsLines.Add($"{s_upgradeStats[entry][UpgradeType.NONE]}");
+
+      // Sub entries
+      foreach (var subEntry in new List<UpgradeType>(s_upgradeStats[entry].Keys))
+      {
+        if (subEntry == UpgradeType.NONE) continue;
+
+        s_skillStatsLines.Add($"- {s_upgradeStats[entry][subEntry]}");
+      }
+      s_skillStatsLines.Add($"");
+    }
+    s_skillStatsLines.RemoveAt(s_skillStatsLines.Count - 1);
+  }
+
+  public static void RenderSkillStatsMenu()
+  {
+    if (s_skillStatsLines.Count == 0) return;
+
+    var lineMaxLength = 36;
+
+    // Substring lines for scroll
+    var descText = GameResources.s_Instance._TextStats;
+    var finalText = "";
+    var lineCount = 0;
+    for (var i = s_skillStatsLineStart; i < s_skillStatsLines.Count && lineCount++ < lineMaxLength; i++)
+    {
+      var line = s_skillStatsLines[i];
+      finalText += $"{line}\n";
+    }
+
+    descText.text = finalText;
+  }
+
+  public static void IncrementStatsScroll(int by)
+  {
+    var lineStartSave = s_skillStatsLineStart;
+    s_skillStatsLineStart = Mathf.Clamp(s_skillStatsLineStart + by, 0, Mathf.Clamp(s_skillStatsLines.Count - 36, 0, 1000));
+    if (lineStartSave != s_skillStatsLineStart)
+      RenderSkillStatsMenu();
+  }
+
+  //
+  static int s_saveCount;
+  static void UpdateUpgradeUI(UpgradeType upgradeType, bool reset = false)
+  {
+    var upgrade_data = s_upgrades[upgradeType];
 
     if (upgrade_data._Active)
     {
@@ -852,17 +1269,21 @@ static public class Shop
         if (!reset)
         {
           var button_new = GameObject.Instantiate(button_.gameObject, button_.parent);
+          button_new.name = $"{upgradeType}";
           GameObject.Destroy(button_new.transform.GetChild(1).GetChild(0).gameObject);
           counters = button_new.transform.GetChild(1);
-          var child_pos = button_new.transform.parent.childCount - 1;
+
+          var button_count = button_new.transform.parent.childCount;
+          var child_pos = button_count - 1;
           var start_pos = button_.localPosition;
 
-          button_new.name = $"{upgrade}";
-          button_new.transform.localPosition = start_pos + new Vector3(-12f * (child_pos - 1), 0f, 0f);
+          for (var i = 1; i < button_count; i++)
+            button_new.transform.parent.GetChild(i).localPosition = start_pos + new Vector3(-12f * ((button_count - 2) - (i - 1)), 0f, 0f);
+
           button_new.SetActive(true);
 
           // Icon
-          switch (upgrade)
+          switch (upgradeType)
           {
             case UpgradeType.TRI_SHOT_COUNTER:
               button_new.transform.GetChild(0).GetChild(0).gameObject.SetActive(true);
@@ -875,7 +1296,7 @@ static public class Shop
               break;
 
             default:
-              Debug.Log($"Unhandled upgradetype: {upgrade}");
+              Debug.Log($"Unhandled upgradetype: {upgradeType}");
               break;
           }
 
@@ -954,7 +1375,7 @@ static public class Shop
       }
 
       // Save upgrade data
-      s_upgrades[upgrade] = upgrade_data;
+      s_upgrades[upgradeType] = upgrade_data;
     }
   }
 
@@ -974,9 +1395,9 @@ static public class Shop
     }
   }
 
-  static void IncrementUpgrade(UpgradeType upgrade, int by = 1)
+  static void IncrementUpgrade(UpgradeType upgradeType, int by = 1)
   {
-    var upgrade_data = s_upgrades[upgrade];
+    var upgrade_data = s_upgrades[upgradeType];
 
     // Check sub upgrade
     if (upgrade_data._CountUpgrade != UpgradeType.NONE)
@@ -987,7 +1408,7 @@ static public class Shop
 
     // Increment
     upgrade_data._Count += by;
-    s_upgrades[upgrade] = upgrade_data;
+    s_upgrades[upgradeType] = upgrade_data;
 
     // Update UI
     if (upgrade_data._Count >= upgrade_data._Counters.Length)
@@ -1000,6 +1421,38 @@ static public class Shop
     else
       for (var i = 0; i < by; i++)
         upgrade_data._Counters[upgrade_data._Count - i - 1].material.color = Color.white;
+  }
+
+  //
+  public static void IncrementUpgradeByPercent(UpgradeType upgradeType, float byDecimalPercent)
+  {
+    var upgrade_data = s_upgrades[upgradeType];
+
+    // Check sub upgrade
+    if (upgrade_data._CountUpgrade != UpgradeType.NONE)
+    {
+      IncrementUpgradeByPercent(upgrade_data._CountUpgrade, byDecimalPercent);
+      return;
+    }
+
+    // Increment
+    var by = Mathf.RoundToInt(upgrade_data._Counters.Length * byDecimalPercent);
+    IncrementUpgrade(upgradeType, by);
+  }
+
+  public static void IncrementUpgradesByPercent(float byDecimalPercent)
+  {
+    // Check active upgrades
+    foreach (var upgrade in s_upgradesActive)
+    {
+      var upgrade_data = s_upgrades[upgrade];
+      if (upgrade_data._Counters == null)
+        continue;
+      if (upgrade_data._Count >= upgrade_data._Counters.Length)
+        continue;
+
+      IncrementUpgradeByPercent(upgrade, byDecimalPercent);
+    }
   }
 
   // Reset a upgrade's UI
@@ -1083,6 +1536,23 @@ static public class Shop
     return upgrade_data._Counters?.Length ?? 0;
   }
 
+  public static void ToWave()
+  {
+    PlayerScript.ButtonNoise();
+
+    MenuManager.s_PauseButton.SetActive(true);
+    MenuManager.s_StatsButton.SetActive(true);
+    MenuManager.s_ShopMenu.Hide();
+    if (Wave.ShopVisible())
+    {
+      Wave.ToggleShopUI(true);
+    }
+
+    MenuManager.s_ShopMenu.Hide();
+    Time.timeScale = GameScript.s_TimeSped ? 2.5f : 1f;
+    GameScript._state = GameScript.GameState.PLAY;
+  }
+
   // Check shop UI buttons
   public static void ShopInput(string colliderName)
   {
@@ -1131,26 +1601,42 @@ static public class Shop
     // UI
     var icon = upgrade_data._Counters[0].transform.parent.parent.GetComponent<MeshRenderer>();
     icon.material.color = upgrade_data._Enabled
-        ? Color.green
-        : upgrade_data._Counters[0].transform.parent.parent.parent
-            .GetChild(0)
-            .GetChild(1)
-            .GetChild(0)
-            .GetComponent<MeshRenderer>()
-            .material.color;
+      ? Color.green
+      : upgrade_data._Counters[0].transform.parent.parent.parent
+        .GetChild(0)
+        .GetChild(1)
+        .GetChild(0)
+        .GetComponent<MeshRenderer>()
+        .material.color;
   }
 
   // Set all of the shop's buttons' prices
-  public static void UpdateShopPrices()
+  public static void UpdateShopPrices(bool rerolled = false)
   {
     var buttons = new GameObject[]
     {
-                        MenuManager._shop._menu.transform.GetChild(1).gameObject,
-                        MenuManager._shop._menu.transform.GetChild(2).gameObject,
-                        MenuManager._shop._menu.transform.GetChild(3).gameObject
+      MenuManager.s_ShopMenu._menu.transform.GetChild(1).gameObject,
+      MenuManager.s_ShopMenu._menu.transform.GetChild(2).gameObject,
+      MenuManager.s_ShopMenu._menu.transform.GetChild(3).gameObject
     };
+
+    // Gather current selections / reset to default
+    var upgradesLast = new UpgradeType[3];
+    var selectionIndex = 0;
+    var hasUpgradesLast = false;
     foreach (var button in buttons)
     {
+      // Gather current selection
+      var selectionLast = UpgradeType.NONE;
+      if (System.Enum.TryParse(button.name, true, out selectionLast))
+        if (selectionLast != UpgradeType.NONE)
+        {
+          upgradesLast[selectionIndex] = selectionLast;
+          hasUpgradesLast = true;
+        }
+      selectionIndex++;
+
+      // Reset to default
       button.name = $"empty";
       UpdateShopButton(button, -1);
       button.transform.GetChild(2).GetComponent<TMPro.TextMeshPro>().text = "";
@@ -1173,11 +1659,45 @@ static public class Shop
       return;
     }
 
-    // Get random upgrades
+    // Check available same as current
     var upgradesAvailable = new List<UpgradeType>(s_shopSelections);
+    if (hasUpgradesLast && upgradesAvailable.Count < 6)
+    {
+      var allSame = true;
+      foreach (var u0 in upgradesLast)
+      {
+        if (u0 == UpgradeType.NONE)
+          continue;
+
+        var oneSame = false;
+        foreach (var u1 in upgradesAvailable)
+        {
+          if (u0 == u1)
+          {
+            oneSame = true;
+            break;
+          }
+        }
+
+        if (!oneSame)
+          allSame = false;
+      }
+      if (allSame)
+        upgradesLast = new UpgradeType[3];
+    }
+
+    // Get random upgrades
     while (true)
     {
+
+      // Get random upgrade
       var upgradeType = upgradesAvailable[Random.Range(0, upgradesAvailable.Count)];
+
+      // Check for same upgrade if rerolled
+      if (rerolled && upgradesLast.Contains(upgradeType))
+        continue;
+
+      //
       var upgrade = s_upgrades[upgradeType];
       upgradesAvailable.Remove(upgradeType);
       var button = buttons[upgradesCount - 1];
@@ -1207,9 +1727,9 @@ static public class Shop
   {
     var buttons = new GameObject[]
     {
-      MenuManager._shop._menu.transform.GetChild(1).gameObject,
-      MenuManager._shop._menu.transform.GetChild(2).gameObject,
-      MenuManager._shop._menu.transform.GetChild(3).gameObject
+      MenuManager.s_ShopMenu._menu.transform.GetChild(1).gameObject,
+      MenuManager.s_ShopMenu._menu.transform.GetChild(2).gameObject,
+      MenuManager.s_ShopMenu._menu.transform.GetChild(3).gameObject
     };
     foreach (var button in buttons)
     {
@@ -1225,10 +1745,18 @@ static public class Shop
       var price = s_upgrades[upgradeType].GetCurrentCost();
 
       UpdateShopButton(button, price);
+
+      // Update desc
+      var desc = s_upgrades[upgradeType]._Desc;
+      button.transform.GetChild(2).GetComponent<TMPro.TextMeshPro>().text = $"{desc}";
+      if (desc.Length == 0)
+      {
+        Debug.LogWarning($"No desc set for {button.name}");
+      }
     }
 
     // Reroll button
-    var button0 = MenuManager._shop._menu.transform.GetChild(4).gameObject;
+    var button0 = MenuManager.s_ShopMenu._menu.transform.GetChild(4).gameObject;
     var rerollCost = GameScript.s_NumRerolls * 100;
     UpdateShopButton(button0, rerollCost);
   }
@@ -1247,7 +1775,7 @@ static public class Shop
   static void UpdateShopButton(GameObject button, int price)
   {
     button.GetComponent<BoxCollider>().enabled = true;
-    var t = button.transform.GetChild(1).GetComponent<TextMesh>();
+    var t = button.transform.GetChild(1).GetComponent<TMPro.TextMeshPro>();
     button.transform.GetChild(1).name = $"{price}";
 
     /*/ Set text size
@@ -1294,14 +1822,13 @@ static public class Shop
   // Show / hide shop menu
   static public void ToggleShop(bool toggle)
   {
-    MenuManager._shop.Toggle(toggle);
+    MenuManager.s_ShopMenu.Toggle(toggle);
     if (toggle)
     {
       GameScript._state = GameScript.GameState.SHOP;
       MenuManager._waveSign.SetActive(true);
-      MenuManager._waveSign.transform.localPosition = new Vector3(0f, 30.5f, 10f);
-      MenuManager._waveSign.transform.GetChild(0).GetChild(0).GetComponent<TextMesh>().text =
-          "" + (Wave.s_MetaWaveIter + 1);
+      MenuManager._waveSign.transform.localPosition = new Vector3(MenuManager._waveSign.transform.localPosition.x, 30.5f, MenuManager._waveSign.transform.localPosition.z);
+      MenuManager._waveSign.transform.GetChild(0).GetChild(0).GetComponent<TextMesh>().text = "" + (Wave.s_MetaWaveIter + 1);
     }
     PlayerScript.SetAmmoForShop();
   }
@@ -1309,6 +1836,6 @@ static public class Shop
   // Make a sound when a purchase is completed
   static public void SoundPurchase()
   {
-    GameScript.PlaySound(MenuManager._shop._menu.transform.GetChild(0).GetChild(0).gameObject);
+    GameScript.PlaySound(MenuManager.s_ShopMenu._menu.transform.GetChild(0).GetChild(0).gameObject);
   }
 }

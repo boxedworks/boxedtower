@@ -1,13 +1,19 @@
 ﻿using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class EnemyScript : MonoBehaviour
 {
+  static int s_id;
+  int _id;
+
   public EnemyType _EnemyType;
 
   Rigidbody2D _rb;
 
   int _flag;
+
+  bool _hasBalloon;
 
   public bool _IsDead,
       _CanDropLoot;
@@ -24,6 +30,8 @@ public class EnemyScript : MonoBehaviour
     get { return _rb.position.x > GameResources.s_Instance._SpawnLine.GetChild(0).position.x; }
   }
 
+  public static Dictionary<int, (EnemyScript, MeshRenderer)> s_Sensors;
+
   public enum EnemyType
   {
     GROUND_ROLL,
@@ -32,7 +40,7 @@ public class EnemyScript : MonoBehaviour
     GROUND_ROLL_ARMOR_4,
     GROUND_ROLL_ARMOR_8,
 
-    GROUND_ROLL_STONE_2,
+    GROUND_ROLL_STONE_1,
 
     GROUND_POP,
     GROUND_POP_FLOAT,
@@ -48,7 +56,9 @@ public class EnemyScript : MonoBehaviour
 
     CRATE,
 
-    BOSS
+    BOSS,
+
+    BALLOON,
   }
 
   // Use this for initialization
@@ -63,11 +73,6 @@ public class EnemyScript : MonoBehaviour
   void Start()
   {
     Init();
-
-    if (_pitchSave == 0f)
-      _pitchSave = _EnemyNoise.pitch;
-    if (_forceModSave == 0f)
-      _forceModSave = _ForceModifier;
   }
 
   public void Spawn()
@@ -82,8 +87,21 @@ public class EnemyScript : MonoBehaviour
       return;
     _rb = GetComponent<Rigidbody2D>();
 
+    _id = s_id++;
+    if (s_Sensors == null)
+      s_Sensors = new Dictionary<int, (EnemyScript, MeshRenderer)>();
+    foreach (var sensor in _Sensors)
+    {
+      s_Sensors.Add(sensor.GetInstanceID(), (this, sensor));
+    }
+
     _spawnTime = Time.time;
     _CanDropLoot = true;
+
+    if (_pitchSave == 0f)
+      _pitchSave = _EnemyNoise.pitch;
+    if (_forceModSave == 0f)
+      _forceModSave = _ForceModifier;
 
     // Error
     if (_Sensors?.Length == 0)
@@ -104,17 +122,15 @@ public class EnemyScript : MonoBehaviour
       _IsSlide = true;
     }
 
-    // Check floating
-    if (_EnemyType == EnemyType.GROUND_POP_FLOAT)
-    {
-      _flag = Random.Range(0, 10);
-    }
-
     // Perk
-    var sizeMod = Shop.GetUpgradeCount(Shop.UpgradeType.ENEMY_SIZED) * 1.3f;
-    if (sizeMod > 0)
+    if (_EnemyType == EnemyType.GROUND_ROLL_SMALL)
     {
-      transform.localScale *= sizeMod;
+      var sizeMod = Shop.GetUpgradeCount(Shop.UpgradeType.ENEMY_SIZED) * 1.3f;
+      if (sizeMod > 0)
+      {
+        transform.localScale *= sizeMod;
+        _ForceModifier += 0.06f;
+      }
     }
 
     /*if(_type == EnemyType.BOSS)
@@ -131,8 +147,14 @@ public class EnemyScript : MonoBehaviour
     Move();
   }
 
+  bool _escapeSpawn;
+  float _escapeSpawnTime;
   void Update()
   {
+
+    if (_IsDead)
+      return;
+
     /*if (_isSlide)
     {
       _EnemyNoise.pitch = Time.timeScale;
@@ -141,8 +163,22 @@ public class EnemyScript : MonoBehaviour
     if (_rb.position.y < -8.5f)
     {
       Die(false);
+      Debug.Log($"[{_EnemyType}] died from going under map");
     }
 
+    // Check spawn leave
+    if (!_escapeSpawn && !_beforeSpawn)
+    {
+      _escapeSpawn = true;
+      _escapeSpawnTime = Time.time;
+
+
+      OnLeaveSpawn();
+      //if (!_IsSlide && _EnemyType != EnemyType.BALLOON && Random.Range(0, 2) == 0)
+      //  SpawnBalloon();
+    }
+
+    // Check slide
     if (_IsSlide)
     {
       if (GameScript.StateAtPlay())
@@ -156,6 +192,18 @@ public class EnemyScript : MonoBehaviour
           _EnemyNoise.pitch = 0f;
       }
       return;
+    }
+
+    // Check balloon
+    if (_EnemyType == EnemyType.BALLOON)
+    {
+
+      if (_other._IsDead)
+      {
+        Die(true);
+      }
+      else
+        _lr.SetPositions(new Vector3[] { transform.position, _other.transform.position });
     }
 
     // Make sure not flying towards player very quickly
@@ -180,14 +228,26 @@ public class EnemyScript : MonoBehaviour
       _ForceModifier = _forceModSave;
     }
 
-    if (Time.time - _spawnTime > 25f && _beforeSpawn)
+    if (Time.time - _spawnTime > 75f && _beforeSpawn)
     {
       Die(false);
+      Debug.Log($"[{_EnemyType}] died from stuck in spawn");
     }
 
     if (transform.position.y > 80f)
     {
       Die(false);
+      Debug.Log($"[{_EnemyType}] died from flying above map");
+    }
+  }
+
+  // Fired when enemy leaves spawn
+  void OnLeaveSpawn()
+  {
+
+    switch (_EnemyType)
+    {
+
     }
   }
 
@@ -199,34 +259,59 @@ public class EnemyScript : MonoBehaviour
       return;
     switch (_EnemyType)
     {
+
+      case EnemyType.BALLOON:
+
+        // Check y pos
+        if (_flag == 0)
+          _flag = Random.Range(1, 9);
+
+        var wantPos = 10.5f + _flag * 0.9f;
+
+        _rb.position += (new Vector2(_rb.position.x, wantPos) - _rb.position) * Time.fixedDeltaTime * 0.5f;
+
+        // X pos
+        _rb.position += new Vector2(-1f * Time.fixedDeltaTime, 0f);
+
+        // At tower
+        if (_rb.position.x < -11f)
+        {
+          Die(false);
+          break;
+        }
+
+        break;
+
       case (EnemyType.GROUND_ROLL):
-        _rb.AddTorque(8f * _ForceModifier);
+        _rb.AddTorque(7.8f * _ForceModifier);
         break;
       case (EnemyType.GROUND_ROLL_SMALL):
-        _rb.AddTorque(2.8f * _ForceModifier);
+        _rb.AddTorque(2.7f * _ForceModifier);
         break;
       case (EnemyType.GROUND_ROLL_ARMOR_2):
-        _rb.AddTorque(9.6f * _ForceModifier);
+        _rb.AddTorque(8.4f * _ForceModifier);
         break;
       case (EnemyType.GROUND_ROLL_ARMOR_4):
-        _rb.AddTorque(11f * _ForceModifier);
+        _rb.AddTorque(8.7f * _ForceModifier);
         break;
       case (EnemyType.GROUND_ROLL_ARMOR_8):
-        _rb.AddTorque(21f * _ForceModifier);
+        _rb.AddTorque(20.5f * _ForceModifier);
         break;
-      case (EnemyType.GROUND_ROLL_STONE_2):
-        _rb.AddTorque(16f * _ForceModifier);
+      case (EnemyType.GROUND_ROLL_STONE_1):
+        _rb.AddTorque(22f * _ForceModifier);
         break;
 
       case (EnemyType.CRATE):
         _rb.AddTorque(8f * _ForceModifier);
         break;
       case (EnemyType.GROUND_POP):
+
         if (_beforeSpawn)
         {
           _rb.AddTorque(6f * _ForceModifier);
           break;
         }
+
         _timer -= Time.fixedDeltaTime;
         if (_timer < 0f && _rb.position.y < -3f && Mathf.Abs(_rb.velocity.y) < 0.2f)
         {
@@ -239,7 +324,7 @@ public class EnemyScript : MonoBehaviour
               ) * _ForceModifier
           );
 
-          _timer = 3f + Random.value * 3f;
+          _timer = 4f + Random.value * 6f;
 
           _EnemyNoise.pitch = _pitchSave + Random.Range(-1f, 1f) * 0.15f;
           _EnemyNoise.Play();
@@ -249,7 +334,7 @@ public class EnemyScript : MonoBehaviour
       case (EnemyType.GROUND_POP_FLOAT):
 
         // In spawn
-        if (_beforeSpawn)
+        if (_beforeSpawn || (!_hasBalloon && _rb.position.y < -3f && _flag != 0))
         {
           if (_rb.angularDrag != 1.8f)
             _rb.angularDrag = 1.8f;
@@ -258,17 +343,9 @@ public class EnemyScript : MonoBehaviour
           break;
         }
 
-        // At tower
-        if (_rb.position.x < -11f)
-        {
-          _rb.gravityScale = 1f;
-          _rb.constraints = RigidbodyConstraints2D.None;
-          break;
-        }
-
         // In between; roll
         _timer -= Time.deltaTime;
-        if (_timer > 0f && _rb.gravityScale == 1f)
+        if (_timer > 0f && !_hasBalloon)
         {
           if (_rb.angularDrag != 1.8f && _rb.velocity.y < 0.3f)
             _rb.angularDrag = 1.8f;
@@ -276,48 +353,33 @@ public class EnemyScript : MonoBehaviour
         }
 
         // Right before hitting tower, sometimes start floating again to trick
-        if (_rb.gravityScale == 0f)
+        if (_flag == 0 && !_hasBalloon)
         {
-          if (_timer < 0f || _rb.position.x < -3f)
+          if (_rb.position.y > 6f && _Sensors[0].isVisible)
           {
-            _timer = 3f + Random.value * 3f;
-            _rb.gravityScale = 1f;
-            _rb.constraints = RigidbodyConstraints2D.None;
-          }
-
-          var vel = _rb.velocity;
-          vel.x += (-4f - vel.x) * Time.deltaTime * 5f;
-          _rb.velocity = vel;
-        }
-        // Else, when in air, stop movement and float towards player
-        else
-        {
-          if (_rb.position.y > 5.5f + _flag * 0.25f)
-          {
-            _rb.gravityScale = 0f;
-            _rb.velocity = new Vector3(_rb.velocity.x, 0f, 0f);
-            _rb.drag = 0.01f;
-            _rb.constraints = RigidbodyConstraints2D.FreezePositionY;
+            SpawnBalloon();
             _timer = 2f + Random.value * 3f;
+            _flag = 1;
             break;
           }
+
+          if (_timer < 0f && _rb.position.y < -3f && Mathf.Abs(_rb.velocity.y) < 0.2f)
+          {
+            _rb.angularDrag = 0.4f;
+            _rb.AddTorque(100f * _ForceModifier);
+            _rb.AddForce(
+                new Vector2(
+                    -150f * Random.Range(0.7f, 1.1f),
+                    775f * Random.Range(0.95f, 1.15f)
+                ) * _ForceModifier
+            );
+
+            _timer = 1f + Random.value * 2f;
+
+            _EnemyNoise.Play();
+          }
         }
 
-        if (_timer < 0f && _rb.position.y < -5f && _rb.gravityScale == 1f)
-        {
-          _rb.angularDrag = 0.4f;
-          _rb.AddTorque(100f * _ForceModifier);
-          _rb.AddForce(
-              new Vector2(
-                  -150f * Random.Range(0.7f, 1.1f),
-                  775f * Random.Range(0.95f, 1.15f)
-              ) * _ForceModifier
-          );
-
-          _timer = 1f + Random.value * 2f;
-
-          _EnemyNoise.Play();
-        }
         break;
 
       case (EnemyType.GROUND_SLIDE):
@@ -430,6 +492,7 @@ public class EnemyScript : MonoBehaviour
             if (r.material.color == Color.black)
               break;
             r.material.color = Color.black;
+            s_Sensors.Remove(r.GetInstanceID());
 
             // Check towers
             if (_IsSlide)
@@ -518,6 +581,16 @@ public class EnemyScript : MonoBehaviour
     return true;
   }
 
+
+  public static EnemyScript GetEnemy(int index)
+  {
+    return GameResources.s_Instance._ContainerAlive.GetChild(index).GetComponent<EnemyScript>();
+  }
+  public static int GetEnemyAliveCount()
+  {
+    return GameResources.s_Instance._ContainerAlive.childCount;
+  }
+
   public void Die(bool dropLoot = true)
   {
     if (_IsDead)
@@ -536,6 +609,7 @@ public class EnemyScript : MonoBehaviour
     foreach (var r in _Sensors)
     {
       r.material.color = Color.black;
+      s_Sensors.Remove(r.GetInstanceID());
       if (r.transform.childCount == 2)
       {
         Destroy(r.transform.GetChild(1).gameObject);
@@ -572,6 +646,17 @@ public class EnemyScript : MonoBehaviour
     var t = 70f;
     rb.AddTorque(new Vector3(Random.Range(-t, t), Random.Range(-t, t), Random.Range(-t, t)));*/
 
+    // Drop balloon
+    if (_EnemyType == EnemyType.BALLOON)
+    {
+      Destroy(GetComponent<SpringJoint2D>());
+      _lr.positionCount = 0;
+      transform.GetChild(0).gameObject.SetActive(false);
+      _EnemyNoise.Play();
+      _other._hasBalloon = false;
+    }
+
+    // Check physics
     if (_IsSlide)
     {
       _rb.bodyType = RigidbodyType2D.Dynamic;
@@ -602,6 +687,8 @@ public class EnemyScript : MonoBehaviour
       DropLoot();
 
       PlayerScript.AddCombo(PlayerScript._COMBO_ADD);
+
+      OnEnemyKilled(_EnemyType);
     }
 
     // Check win
@@ -609,8 +696,18 @@ public class EnemyScript : MonoBehaviour
     {
       GameScript.Win();
     }
+  }
 
+  static void OnEnemyKilled(EnemyType enemyType)
+  {
     PlayerScript.WaveStats._enemiesKilled++;
+
+    // Check skills
+    var tower2 = Shop.GetUpgradeCount(Shop.UpgradeType.TOWER2_RATE);
+    if (tower2 > 0)
+    {
+      PlayerScript.IncrementTower2Timer(tower2 * 1f);
+    }
   }
 
   float _enemyNoiseLast;
@@ -640,7 +737,7 @@ public class EnemyScript : MonoBehaviour
 
     if (c.gameObject.name.Equals("Ground"))
     {
-      if (_EnemyNoise != null && !_IsSlide)
+      if (_EnemyNoise != null && !_IsSlide && _EnemyType != EnemyType.BALLOON)
       {
         if (Time.time - _enemyNoiseLast > 0.15f)
         {
@@ -654,16 +751,43 @@ public class EnemyScript : MonoBehaviour
     _rb.AddForce(new Vector2(0f, 1f) * 100f * _rb.mass);
   }
 
-  static GameObject _castle;
+  public void SpawnBalloon()
+  {
+    var balloon = SpawnEnemy(EnemyType.BALLOON, true);
+    balloon.AttachBalloon(this);
+  }
 
+  LineRenderer _lr;
+  EnemyScript _other;
+  public void AttachBalloon(EnemyScript other)
+  {
+    _other = other;
+
+    var otherCollider = other._Sensors[0].GetComponent<Collider2D>();
+    Physics2D.IgnoreCollision(_Sensors[0].GetComponent<Collider2D>(), otherCollider);
+    Physics2D.IgnoreCollision(GameResources.s_Instance._SpawnLine.GetChild(0).GetComponent<Collider2D>(), otherCollider);
+
+    transform.position = other.transform.position;
+    other._hasBalloon = true;
+
+    var sj = gameObject.AddComponent<SpringJoint2D>();
+    sj.connectedBody = _other._rb;
+    sj.distance = Random.Range(5f, 8f);
+    sj.autoConfigureDistance = false;
+
+    _lr = GetComponent<LineRenderer>();
+  }
+
+  static GameObject _castle;
   // Spawn enemy
-  static public EnemyScript SpawnEnemy(EnemyType type, bool canDropLoot = true)
+  static int s_enemySpawnIter;
+  static public EnemyScript SpawnEnemy(EnemyType enemyType, bool canDropLoot = true)
   {
     var enemyName = "Enemy4";
     var spawnPos = Vector3.zero;
     var spawnLine = GameResources.s_Instance._SpawnLine;
 
-    switch (type)
+    switch (enemyType)
     {
       case (EnemyType.GROUND_ROLL):
         enemyName = "Enemy1";
@@ -680,7 +804,7 @@ public class EnemyScript : MonoBehaviour
       case (EnemyType.GROUND_ROLL_ARMOR_8):
         enemyName = "Enemy13";
         break;
-      case (EnemyType.GROUND_ROLL_STONE_2):
+      case (EnemyType.GROUND_ROLL_STONE_1):
         enemyName = "Enemy_stone0";
         break;
 
@@ -733,32 +857,37 @@ public class EnemyScript : MonoBehaviour
         enemyName = "Enemy20";
         spawnPos = _castle.transform.position;
         break;
+
+      case (EnemyType.BALLOON):
+        enemyName = "Balloon";
+        break;
     }
     var enemy = Instantiate(Resources.Load(enemyName) as GameObject);
 
-    if (type == EnemyType.GROUND_SLIDE_CASTLE)
+    if (enemyType == EnemyType.GROUND_SLIDE_CASTLE)
     {
       _castle = enemy;
     }
 
     enemy.name = enemyName;
-    enemy.transform.parent = GameObject.Find("Alive").transform;
+    enemy.transform.parent = GameResources.s_Instance._ContainerAlive;
+    s_enemySpawnIter++;
     enemy.transform.position = (
         spawnPos == Vector3.zero
             ? new Vector3(
-                GameResources.s_Instance._SpawnLine.position.x - 8f + Random.Range(-1f, 1f),
-                17f + Random.Range(0f, 2f),
+                GameResources.s_Instance._SpawnLine.GetChild(0).position.x + 3f + ((s_enemySpawnIter % 10) / 9f) * 27f,
+                15f + Random.Range(0f, 10f),
                 0f
             )
             : spawnPos
     );
-    var script = enemy.GetComponent<EnemyScript>();
+    var enemyScript = enemy.GetComponent<EnemyScript>();
 
     // Init enemy script
-    script.Init();
-    script._CanDropLoot = canDropLoot;
+    enemyScript.Init();
+    enemyScript._CanDropLoot = canDropLoot;
 
-    return script;
+    return enemyScript;
   }
 
   void DropLoot()
@@ -791,8 +920,8 @@ public class EnemyScript : MonoBehaviour
       case (EnemyType.GROUND_ROLL_ARMOR_8):
         numCoins = 50;
         break;
-      case (EnemyType.GROUND_ROLL_STONE_2):
-        numCoins = 50;
+      case (EnemyType.GROUND_ROLL_STONE_1):
+        numCoins = 65;
         break;
       case (EnemyType.GROUND_SLIDE_SMALL):
         numCoins = 25;
@@ -822,7 +951,11 @@ public class EnemyScript : MonoBehaviour
         numCoins = 50;
         break;
       case (EnemyType.CRATE):
-        numCoins = 75;
+        numCoins = 50;
+        break;
+
+      case (EnemyType.BALLOON):
+        numCoins = 15;
         break;
     }
 
@@ -834,19 +967,19 @@ public class EnemyScript : MonoBehaviour
   IEnumerator DropCoins(int coins)
   {
     coins = Mathf.RoundToInt(coins * PlayerScript.s_Combo);
-    var timer = 0.15f / ((float)coins / 8f);
-    var coinAmount = 1;// Mathf.Clamp((int)(0.15f * coins), 1, 10000);
+    var timer = 0.14f / ((float)coins / 6f);
+    var coinAmount = Mathf.Clamp((int)(0.04f * coins), 1, 3);
     var coinIter = 0;
     var audio = GameResources.s_Instance._AudioCoinDrop;
-    var coinRange = 0.5f;
+    var coinRange = 0.75f;
     switch (_EnemyType)
     {
       case EnemyType.GROUND_ROLL_SMALL:
-        coinRange = 0.25f;
+        coinRange = 0.5f;
         break;
 
       case EnemyType.GROUND_ROLL_ARMOR_8:
-        coinRange = 1f;
+        coinRange = 1.25f;
         break;
 
       case EnemyType.GROUND_SLIDE_SMALL:
@@ -869,7 +1002,12 @@ public class EnemyScript : MonoBehaviour
         var emitParams = new ParticleSystem.EmitParams();
         if (coinAmount > 1)
         {
-          emitParams.position = transform.position + new Vector3(Random.Range(-coinRange, coinRange), 0f, 0f);
+          if (i == 1)
+            emitParams.position = transform.position + new Vector3(coinRange, 0f, 0f);
+          else if (i == 2)
+            emitParams.position = transform.position + new Vector3(-coinRange, 0f, 0f);
+          else
+            emitParams.position = transform.position;
         }
         else
           emitParams.position = transform.position;

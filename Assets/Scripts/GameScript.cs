@@ -13,10 +13,13 @@ public class GameScript : MonoBehaviour
   public static GameState _state;
   public static GameMode _mode;
 
-  public static bool s_musicPlaying,
-      s_HasWon,
+  public static float s_MusicVolumeSave;
+  public static int s_MusicVolume;
+
+  public static bool s_HasWon,
       s_TimeSped;
-  public static int s_NumRerolls, s_NumHealthBuys;
+  public static int s_NumRerolls, s_NumHealthBuys, s_NumActiveSkillsBought,
+   s_NumExits, s_NumExitsMainMenu;
 
   static Color _SkyColor;
 
@@ -27,6 +30,7 @@ public class GameScript : MonoBehaviour
     PAUSED,
     BETWEEN_MENU,
     SHOP,
+    STATS,
     LOSE,
     WIN
   }
@@ -40,17 +44,18 @@ public class GameScript : MonoBehaviour
   void Start()
   {
     s_Instance = this;
+    Time.timeScale = 2.5f;
 
     // Init helpers
     new GameResources();
 
     MenuManager.Init();
     PlayerScript.Init();
+    Guide.Init();
+    ArrowScript.LightningManager.Init();
 
     //
     UpdateResolution();
-
-    s_musicPlaying = true;
 
     _state = GameState.MAIN_MENU;
 
@@ -75,15 +80,16 @@ public class GameScript : MonoBehaviour
     SwitchModes(GameMode.WAVES);
   }
 
+  public static bool s_Fullscreen = true;
   public void UpdateResolution()
   {
     var width = 854;
     var height = 480;
-    var fullscreen = true;
+    var fullscreen = s_Fullscreen;
 
-    /*#if UNITY_EDITOR
+    #if UNITY_EDITOR
           return;
-    #endif*/
+    #endif
     Screen.SetResolution((int)width, (int)height, fullscreen);
     // set the desired aspect ratio (the values in this example are
     // hard-coded for 16:9, but you could make them into public
@@ -129,14 +135,25 @@ public class GameScript : MonoBehaviour
   // Update is called once per frame
   void Update()
   {
-    if (Screen.width != 640)
+    /*if ((Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt)) && (Input.GetKeyDown(KeyCode.Return)))
+    {
+      s_Fullscreen = !s_Fullscreen;
+      UpdateResolution();
+    }
+    else*/
+    {
+#if !UNITY_EDITOR
+    if (Screen.width != 854)
     {
       UpdateResolution();
+    }
+#endif
     }
 
     InputManager.HandleInput();
 
     MenuManager.Update();
+    ArrowScript.LightningManager.Update();
 
     UpdateScreenShake();
 
@@ -406,10 +423,15 @@ public class GameScript : MonoBehaviour
   public static void LoadGameSettings()
   {
     // Load music toggle
-    s_musicPlaying = PlayerPrefs.GetInt("Music", 1) == 1;
+    if (s_MusicVolumeSave == 0f)
+    {
+      s_MusicVolume = PlayerPrefs.GetInt("MusicVolume", 3);
+      s_MusicVolumeSave = s_Instance.GetComponent<AudioSource>().volume;
+    }
 
     s_NumRerolls = 0;
     s_NumHealthBuys = 0;
+    s_NumActiveSkillsBought = 0;
 
     MenuManager.UpdateMusicFX();
   }
@@ -547,8 +569,9 @@ public class GameScript : MonoBehaviour
     MenuManager.ShowMenuAfterTime(MenuManager._loseMenu, 2f);
 
     // Hide buttons
-    MenuManager._pauseButton.SetActive(false);
+    MenuManager.s_PauseButton.SetActive(false);
     Wave.ToggleShopUI(false);
+    GameResources.s_Instance._SliderTower2UI.gameObject.SetActive(false);
 
     // Lose noise
     GameScript.PlaySound(GameObject.Find("Lose"));
@@ -566,7 +589,7 @@ public class GameScript : MonoBehaviour
     s_Instance.StartCoroutine(CoinFall());
     MenuManager.ShowMenuAfterTime(MenuManager._winMenu, 5f);
     MenuManager.ToggleGameUI(false);
-    MenuManager._pauseButton.SetActive(false);
+    MenuManager.s_PauseButton.SetActive(false);
     Wave.ToggleShopUI(false);
 
     // Save the win
@@ -632,5 +655,138 @@ public class GameScript : MonoBehaviour
         break;
     }
     _mode = newMode;
+  }
+
+  public class Guide
+  {
+    static MeshRenderer s_buttonSelection;
+    public static Color s_buttonSaveColor;
+
+    public static void Init()
+    {
+      s_buttonSelection = GameObject.Find("gBasic").transform.GetChild(0).GetComponent<MeshRenderer>();
+      s_buttonSaveColor = s_buttonSelection.material.color;
+      SetGuideText("gBasic");
+    }
+
+    public static void SetGuideText(string guideName)
+    {
+
+      // Color buttons
+      s_buttonSelection.material.color = s_buttonSaveColor;
+
+      s_buttonSelection = GameObject.Find(guideName).transform.GetChild(0).GetComponent<MeshRenderer>();
+      s_buttonSelection.material.color = Color.gray;
+
+      // SFX
+      PlayerScript.ButtonNoise();
+
+      // Set text
+      var guideText = GameObject.Find("gDesc").GetComponent<TMPro.TextMeshPro>();
+      switch (guideName)
+      {
+
+        case "gBasic":
+          guideText.text = @"<b>Basics</b>
+
+Shoot arrows to stop enemies from reaching your tower.
+
+Earn money and purchase upgrades from the shop to survive.";
+
+          break;
+
+        case "gControls":
+          guideText.text = @"<b>Controls</b>
+
+Left-click and drag: Shoot arrow
+
+Right-click: Cancel shot
+
+'Space' key: Toggle slow-mo
+
+Number keys [1-9]: Active skills
+
+'s' key: Shop";
+
+          break;
+
+        case "gShooting":
+          guideText.text = @"<b>Shooting</b>
+
+Click and drag the mouse to shoot. You can hold an arrow to shoot it farther.
+
+Ammo is shown in the bottom-left and replenishes over time.";
+
+          break;
+
+        case "gHealth":
+          guideText.text = @"<b>Health</b>
+
+If an enemy reaches your tower, you lose 1 health. You can gain health back by buying it from the shop.
+
+Health is shown by how tall your tower is.
+
+If your tower reaches the ground, you lose.";
+
+          break;
+
+        case "gShop":
+          guideText.text = @"<b>Shop</b>
+
+Between waves, access the shop to purchase upgrades. Upgrades are shown randomly in the shop.
+
+You can reroll the shop selections, but rerolling costs +100 coins each time.";
+
+          break;
+
+        case "gSkills":
+          guideText.text = @"<b>Skills</b>
+
+Passive skills bought from the shop trigger depending on the skill.
+
+Active skills are shown in the bottom-right and have a cooldown. Defeat enemies to decrease the cooldown.";
+
+          break;
+
+        case "gCombo":
+          guideText.text = @"<b>Combo</b>
+
+Your combo directly multiplies how many coins you receive.
+
+Successfully hitting an enemy will increase your combo by 0.05.
+
+Missing with non-skill arrows or draining the combo timer decreases your combo by 0.15.
+
+Losing health resets your combo to 1.00.";
+
+          break;
+
+        case "gCrates":
+          guideText.text = @"<b>Crates</b>
+
+Receiving a crate at your tower gives you 50 coins.
+
+Shooting a crate gives you nothing.";
+
+          break;
+
+        case "gSlowmo":
+          guideText.text = @"<b>Slowmo</b>
+
+The slowmo meter is shown in the bottom-left.
+
+Press the 'space' key to slow time until the slowmo meter is drained.
+
+After using the slowmo meter, there is a short time cooldown.";
+
+          break;
+
+        default:
+
+          guideText.text = "NOT IMPLEMENTED";
+          break;
+      }
+    }
+
   }
 }

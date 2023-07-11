@@ -15,6 +15,12 @@ public class PlayerScript : MonoBehaviour
       _tower,
       _crystal;
 
+  Transform _laserPointer,
+    _tower2;
+
+  int _tower2ClosestEnemyIter;
+  (EnemyScript, MeshRenderer) _tower2ClosestEnemy;
+
   AudioSource _sBowDraw,
       _sNoArrow,
       _sTowerMove,
@@ -22,7 +28,8 @@ public class PlayerScript : MonoBehaviour
       _sPowerOff,
       _sPowerOn,
       _sNotch,
-      _sFireLoop;
+      _sFireLoop,
+      _sTower2Shoot;
 
   bool _shootReady;
 
@@ -35,7 +42,9 @@ public class PlayerScript : MonoBehaviour
     _slowMoTimer, _slowMoMax, _slowMoDisabled,
     _ammoTime = 1.3f,
     _invincibilityTimer,
-    _combo;
+    _combo,
+
+    _tower2Timer, _tower2LastShootTimer;
 
   public static Color _GemColor;
 
@@ -72,7 +81,10 @@ public class PlayerScript : MonoBehaviour
     _fingerPos2 = transform.GetChild(6).gameObject;
     _arrow = transform.GetChild(3).gameObject;
 
+    _laserPointer = GameObject.Find("LaserPointer").transform;
+
     _tower = GameObject.Find("Tower");
+    _tower2 = GameObject.Find("Tower2").transform;
     _crystal = _tower.transform.GetChild(0).gameObject;
 
     _sBowDraw = GameObject.Find("BowDraw").GetComponent<AudioSource>();
@@ -83,11 +95,12 @@ public class PlayerScript : MonoBehaviour
     _sPowerOn = GameObject.Find("PowerOn").GetComponent<AudioSource>();
     _sNotch = GameObject.Find("Notch").GetComponent<AudioSource>();
     _sFireLoop = GameObject.Find("FireLoop").GetComponent<AudioSource>();
+    _sTower2Shoot = GameObject.Find("Tower2Shoot").GetComponent<AudioSource>();
 
     _health = 2;
     _combo = 1f;
 
-    _GemColor = GameObject.Find("Play").GetComponent<MeshRenderer>().material.color;
+    _GemColor = GameObject.Find("Play").transform.GetChild(0).GetComponent<MeshRenderer>().material.color;
     _crystal.transform.parent = _tower.transform.parent;
   }
 
@@ -118,14 +131,175 @@ public class PlayerScript : MonoBehaviour
     // Check pause
     if (!GameScript.StateAtPlay())
     {
+      // Check audio while pause
       if (_sFireLoop.isPlaying)
         _sFireLoop.pitch = 0f;
+
+      // Hotkey to close store
+      if (MenuManager.s_ShopMenu._Visible)
+        if (Input.GetKeyDown(KeyCode.S))
+        {
+          Shop.ToWave();
+        }
+
+      // Stats
+      if (MenuManager.s_StatsMenu._Visible)
+      {
+        // Hotkey to close stats
+        if (Input.GetKeyDown(KeyCode.I))
+        {
+          MenuManager.StatsMenuBack();
+        }
+
+        // Scroll stats
+        var scrollWheel = Input.mouseScrollDelta.y;
+        var scrollValue = scrollWheel == 0f ? 0 : (scrollWheel > 0f ? 1 : -1);
+        if (scrollValue != 0)
+        {
+          Shop.IncrementStatsScroll(-scrollValue);
+        }
+      }
+
+      // Unpause
+      if (MenuManager.s_PauseMenu._Visible)
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+          MenuManager.Resume();
+        }
+
       return;
     }
     else
     {
       if (_sFireLoop.isPlaying)
         _sFireLoop.pitch = 1f;
+    }
+
+    // Tower2
+    var tower2 = Shop.GetUpgradeCount(Shop.UpgradeType.TOWER2);
+    if (tower2 > 0)
+    {
+
+      // Closest enemy
+      var closestDistance = _tower2ClosestEnemy.Item1 == null ? 1000f : Vector3.Distance(_tower2.position, _tower2ClosestEnemy.Item2.transform.position);
+      var sensorKeys = new List<int>(EnemyScript.s_Sensors.Keys);
+      for (var i = 0; i < Mathf.Clamp(5, 0, sensorKeys.Count); i++)
+      {
+        var enemy_data = EnemyScript.s_Sensors[sensorKeys[_tower2ClosestEnemyIter++ % sensorKeys.Count]];
+        var enemy = enemy_data.Item1;
+        var sensor = enemy_data.Item2;
+
+        if (!enemy.gameObject.activeSelf) continue;
+        if (enemy._EnemyType == EnemyScript.EnemyType.CRATE || enemy._EnemyType == EnemyScript.EnemyType.BALLOON) continue;
+        if (sensor.transform.position.x > _tower2.position.x - 2.5f) continue;
+
+        if (_tower2ClosestEnemy.Item1 == null)
+        {
+          _tower2ClosestEnemy = enemy_data;
+          closestDistance = Vector3.Distance(_tower2.position, sensor.transform.position);
+          continue;
+        }
+
+        var distance = Vector3.Distance(_tower2.position, sensor.transform.position);
+        if (distance < closestDistance)
+        {
+          _tower2ClosestEnemy = enemy_data;
+          closestDistance = distance;
+        }
+      }
+
+      if (_tower2ClosestEnemy.Item1 != null)
+      {
+        if (_tower2ClosestEnemy.Item1._IsDead)
+        {
+          _tower2ClosestEnemy.Item1 = null;
+        }
+        else
+        {
+          Debug.DrawLine(_tower2.transform.position, _tower2ClosestEnemy.Item2.transform.position, Color.red);
+        }
+      }
+
+      // Shoot
+      _tower2Timer = Mathf.Clamp(_tower2Timer - Time.unscaledDeltaTime, 0f, 10000f);
+      _tower2LastShootTimer = Mathf.Clamp(_tower2LastShootTimer - Time.deltaTime, 0f, 10000f);
+      var maxTime = _UpgradeFunction_tower2Rate.Invoke(tower2);
+      GameResources.s_Instance._SliderTower2UI.value = 1f - ((_tower2Timer) / maxTime);
+      if (_tower2Timer <= 0f && _tower2LastShootTimer <= 0f)
+      {
+        if (_tower2ClosestEnemy.Item1 != null)
+        {
+
+          // Closest enemy
+          var shootPos = _tower2.GetChild(0).position;
+          var targetPos = _tower2ClosestEnemy.Item2.transform.position;
+
+          _tower2Timer += maxTime;
+          _tower2LastShootTimer = 0.6f;
+
+          var distance = (shootPos - targetPos);
+
+          targetPos.x -= 1f - 0.04f * distance.x;
+          targetPos.y += 0.15f * distance.x;
+
+          // Force / dir
+          var arrowForce = 2300f + 43f * distance.x;
+          var dir = -(shootPos - targetPos);
+
+          /*var dir = new Vector3(1f, 0f, 0f);
+
+          var gravity = 9.81f;
+
+          var startY = shootPos.y;
+          var endY = -8.9f;
+
+          var deltaY = startY - endY;
+
+          var deltaYTime = Mathf.Sqrt(2f * deltaY / gravity);
+          Debug.Log(deltaYTime);
+
+          var startX = shootPos.x;
+          var endX = targetPos.x;
+
+          var deltaX = startX - endX;
+          var xAcceleration = ((2f * -deltaX) / Mathf.Pow(deltaYTime, 2f));
+
+          Debug.Log($"dt: {deltaX} a: {xAcceleration}");*/
+
+          // Spawn arrow
+          var arrow = SpawnArrow();
+          arrow._GameSpawned = true;
+          var arrowPos = shootPos;
+          arrowPos.z = 0f;
+          arrow.transform.position = arrowPos;
+
+          // Fire!
+          arrow.GetComponent<Rigidbody2D>().bodyType = RigidbodyType2D.Dynamic;
+          arrow.Init();
+          arrow.Fired();
+          arrow.GetComponent<Rigidbody2D>().AddForce(dir.normalized * arrowForce);
+
+          // FX
+          _tower2.GetChild(0).rotation = Quaternion.LookRotation(dir);
+          (_tower2.GetChild(0).GetChild(0).GetComponent<ParticleSystem>()).Play();
+          _sTower2Shoot.Play();
+
+          Debug.DrawLine(shootPos, targetPos, Color.green, 4f);
+        }
+      }
+    }
+
+    // Laser
+    var laserActive = s_UpgradeEnabled_penetratingArrow && _shootReady;
+    if (!laserActive)
+    {
+      if (_laserPointer.gameObject.activeSelf)
+        _laserPointer.gameObject.SetActive(false);
+    }
+    else
+    {
+      if (!_laserPointer.gameObject.activeSelf)
+        _laserPointer.gameObject.SetActive(true);
     }
 
     // Hotkeys
@@ -144,10 +318,38 @@ public class PlayerScript : MonoBehaviour
           Shop.UpgradeInput(unlocks.GetChild(index).name);
     }
 
+    // Shop
+    if (Wave.ShopVisible())
+      if (Input.GetKeyDown(KeyCode.S))
+      {
+        UIInput("ShopButton");
+      }
+
+    // Stats
+    //if (Wave.ShopVisible())
+    if (Input.GetKeyDown(KeyCode.I))
+    {
+      UIInput("StatsButton");
+    }
+
+    // Pause
+    if (!MenuManager.s_PauseMenu._Visible)
+      if (Input.GetKeyDown(KeyCode.Escape))
+      {
+        UIInput("ToPause");
+      }
+
+    // Cancel shot
+    if (Input.GetMouseButtonDown(1))
+    {
+      UIResetFinger();
+    }
+
     // Increment slowmo
     if (!GameScript.s_TimeSped)
     {
-      _slowMoTimer = Mathf.Clamp(_slowMoTimer - Time.unscaledDeltaTime, 0f, _slowMoMax);
+      var mod = 1f + (Shop.GetUpgradeCount(Shop.UpgradeType.SLOMO_INCREASE) * -0.15f);
+      _slowMoTimer = Mathf.Clamp(_slowMoTimer - (Time.unscaledDeltaTime * mod), 0f, _slowMoMax);
       if (_slowMoTimer == 0f || Input.GetKeyDown(KeyCode.Space))
       {
         _slowMoDisabled = Time.unscaledTime;
@@ -175,7 +377,7 @@ public class PlayerScript : MonoBehaviour
     // Increment ammo timer
     if (_ammo < _maxAmmo)
     {
-      _ammoTimer -= Time.deltaTime;
+      _ammoTimer -= Time.unscaledDeltaTime;
       if (_ammoTimer < 0f)
       {
         _ammoTimer = _ammoTime;
@@ -203,6 +405,10 @@ public class PlayerScript : MonoBehaviour
       _comboTimer = Time.time;
       comboDelta -= PlayerScript._COMBO_REMOVE;
     }
+    if (_combo == 1f)
+      GameResources.s_Instance._SliderComboDecrease.value = 1f;
+    else
+      GameResources.s_Instance._SliderComboDecrease.value = 1f - ((Time.time - _comboTimer) / 8f);
 
     AddCombo(comboDelta);
 
@@ -211,11 +417,28 @@ public class PlayerScript : MonoBehaviour
 
     if (Input.GetKeyDown(KeyCode.C))
     {
-      SetCoins(GetCoins() + 1000);
+      SetCoins(GetCoins() + 10000);
     }
     if (Input.GetKeyDown(KeyCode.V))
     {
       Wave.s_MetaWaveIter++;
+    }
+    if (Input.GetKeyDown(KeyCode.PageUp))
+    {
+      AddHealth();
+    }
+    if (Input.GetKeyDown(KeyCode.PageDown))
+    {
+      RemoveHealth();
+    }
+    if (Input.GetKeyDown(KeyCode.B))
+    {
+      for (var i = GameResources.s_Instance._ContainerAlive.childCount - 1; i >= 0; i--)
+      {
+        var script = GameResources.s_Instance._ContainerAlive.GetChild(i).GetComponent<EnemyScript>();
+        if (script.gameObject.activeSelf)
+          script.Die();
+      }
     }
 
 #endif
@@ -310,18 +533,22 @@ public class PlayerScript : MonoBehaviour
 
   // Combine upgrades
   // Upgrades
-  public bool _upgradeEnabled_triShot
+  public static bool s_UpgradeEnabled_triShot
   {
     get { return Shop.UpgradeEnabled(Shop.UpgradeType.TRI_SHOT); }
   }
-  public bool _upgradeEnabled_arrowRain
+  public static bool s_UpgradeEnabled_arrowRain
   {
     get { return Shop.UpgradeEnabled(Shop.UpgradeType.ARROW_RAIN); }
   }
-  public bool _upgradeEnabled_penetratingArrow
+  public static bool s_UpgradeEnabled_penetratingArrow
   {
     get { return Shop.UpgradeEnabled(Shop.UpgradeType.ARROW_PENETRATION); }
   }
+  public static System.Func<int, float> _UpgradeFunction_tower2Rate => (int count) =>
+  {
+    return 9f - (count * 1f);
+  };
   Shop.UpgradeType _upgrade0,
       _upgrade1;
 
@@ -342,7 +569,8 @@ public class PlayerScript : MonoBehaviour
     return true;
   }
 
-  public Shop.UpgradeType GetUpgrade(int index){
+  public Shop.UpgradeType GetUpgrade(int index)
+  {
     return index == 0 ? _upgrade0 : _upgrade1;
   }
 
@@ -439,7 +667,7 @@ public class PlayerScript : MonoBehaviour
     if (indicatorLength < 0.1f)
       return;
 
-    _indicator2.transform.localScale = new Vector3(indicatorLength, 1f, 0.25f);
+    _indicator2.transform.localScale = new Vector3(indicatorLength, 0.3f, 0.25f);
     _indicator2.transform.position = _fingerPos2.transform.position + dist * 0.5f;
     _indicator2.transform.LookAt(_fingerPos.transform);
     _indicator2.transform.Rotate(new Vector3(0f, 90f, 0f));
@@ -450,7 +678,8 @@ public class PlayerScript : MonoBehaviour
     );
 
     // Notch
-    if (Time.time - _downTime >= 2f)
+    var notchTime = 2f - (1f * (1f / 3f * Shop.GetUpgradeCount(Shop.UpgradeType.ARROW_NOTCH)));
+    if (Time.time - _downTime >= notchTime)
     {
       if (_notch == 0)
       {
@@ -458,7 +687,7 @@ public class PlayerScript : MonoBehaviour
         _notch++;
         _sNotch.Play();
       }
-      else if (Time.time - _downTime >= 4f)
+      else if (Time.time - _downTime >= notchTime * 2)
       {
         if (_notch == 1)
         {
@@ -466,7 +695,7 @@ public class PlayerScript : MonoBehaviour
           _notch++;
           _sNotch.Play();
         }
-        else if (Time.time - _downTime >= 6f)
+        else if (Time.time - _downTime >= notchTime * 3)
         {
           if (_notch == 2)
           {
@@ -488,9 +717,9 @@ public class PlayerScript : MonoBehaviour
                 _notch > 0
                     ? _notch > 1
                         ? _notch > 2
-                            ? 1.9f
-                            : 1.6f
-                        : 1.3f
+                            ? 1.6f
+                            : 1.4f
+                        : 1.2f
                     : 1f
             )
         ) * 1.3f
@@ -528,6 +757,21 @@ public class PlayerScript : MonoBehaviour
 
     // Move cube in Player
     transform.GetChild(0).rotation = _indicatorArrow.transform.rotation;
+
+    // Laser
+    var laserLength = 100f;
+    _laserPointer.transform.localScale = new Vector3(laserLength, 1f, 0.25f);
+    _laserPointer.transform.LookAt(
+        _laserPointer.transform.position + new Vector3(dist.x, dist.y, transform.position.z),
+        new Vector3(0f, 0f, 1f)
+    );
+    _laserPointer.transform.Rotate(new Vector3(0f, 90f, 0f));
+    _laserPointer.transform.localPosition = -_indicator.transform.right * (laserLength / 2f + indicatorLength + 2f);
+    _laserPointer.transform.position = new Vector3(
+        _laserPointer.transform.position.x + offset.x,
+        _laserPointer.transform.position.y + offset.y,
+        -5f
+    );
 
     // Change pitch of bow draw sound
     var deltaDis = Vector2.Distance(_lastmousepos, InputManager._MouseCurrentPos);
@@ -574,36 +818,62 @@ public class PlayerScript : MonoBehaviour
       _sBowDraw.Play();
     }
 
+    UIInput(hit.collider.name);
+  }
+
+  public static void UIInput(string colliderName)
+  {
     // Check UI buttons
-    if (hit.collider.name.Equals("ToPause"))
+    if (colliderName.Equals("ToPause"))
     {
       Time.timeScale = 0f;
-      MenuManager._pauseMenu.Show();
-      MenuManager._pauseButton.SetActive(false);
+      MenuManager.s_PauseMenu.Show();
+      MenuManager.s_PauseButton.SetActive(false);
+      MenuManager.s_StatsButton.SetActive(false);
       Wave.ToggleShopUI(false);
-      MenuManager._musicButton.SetActive(true);
-      _sBowDraw.Stop();
+      s_Singleton._sBowDraw.Stop();
       GameScript._state = GameScript.GameState.PAUSED;
+
+      GameScript.s_NumExits = 0;
+      MenuManager.s_PauseMenu._menu.transform.Find("ToMenu").GetChild(1).GetComponent<TMPro.TextMeshPro>().text = $"Exit";
     }
-    else if (hit.collider.name.Equals("ShopButton"))
+
+    else if (colliderName.Equals("ShopButton"))
     {
       Time.timeScale = 0f;
       Shop.UpdateShopPriceStatuses();
-      MenuManager._shop.Show();
-      MenuManager._pauseButton.SetActive(false);
+      MenuManager.s_ShopMenu.Show();
+      MenuManager.s_PauseButton.SetActive(false);
+      MenuManager.s_StatsButton.SetActive(false);
       Wave.ToggleShopUI(false);
-      _sBowDraw.Stop();
+      s_Singleton._sBowDraw.Stop();
       GameScript._state = GameScript.GameState.SHOP;
     }
+
+    else if (colliderName.Equals("StatsButton"))
+    {
+      Time.timeScale = 0f;
+      //Shop.UpdateShopPriceStatuses();
+      Shop.GenerateSkillStatsMenu();
+      Shop.RenderSkillStatsMenu();
+      MenuManager.s_StatsMenu.Show();
+      MenuManager.s_PauseButton.SetActive(false);
+      MenuManager.s_StatsButton.SetActive(false);
+      Wave.ToggleShopUI(false);
+      s_Singleton._sBowDraw.Stop();
+      GameScript._state = GameScript.GameState.STATS;
+    }
+
     // Check upgrades
     else
     {
-      Shop.UpgradeInput(hit.collider.name);
+      Shop.UpgradeInput(colliderName);
     }
   }
 
   static public void ButtonNoise()
   {
+    if (Time.time < 0.5f) return;
     GameScript.PlaySound(s_Singleton._sPowerOn);
   }
 
@@ -615,7 +885,9 @@ public class PlayerScript : MonoBehaviour
 
   public void MouseUp()
   {
+    var savenotch = _notch;
     _notch = 0;
+
     if (Time.time - MenuManager.s_waveStart < 0.25f)
       return;
     if (_fingerPos.transform.localPosition == new Vector3(-50f, 0f, -5f))
@@ -634,23 +906,38 @@ public class PlayerScript : MonoBehaviour
       var shots = 1;
 
       // Check trishot
-      if (_upgradeEnabled_triShot && GetUpgradeOrder(Shop.UpgradeType.TRI_SHOT_COUNTER) == 0)
+      if (s_UpgradeEnabled_triShot && GetUpgradeOrder(Shop.UpgradeType.TRI_SHOT_COUNTER) == 0)
       {
         shots *= (Shop.GetUpgradeCount(Shop.UpgradeType.TRI_SHOT) == 1 ? 3 : 5);
         ResetUpgrade(Shop.UpgradeType.TRI_SHOT_COUNTER);
       }
 
+      // Check projectile count
+      var projectileCount = 1;
+      if (savenotch == 3)
+        projectileCount = Mathf.Clamp(Shop.GetUpgradeCount(Shop.UpgradeType.PROJECTILE_AMOUNT) + 1, 1, _ammo);
+
       // Shooooot
-      Shoot(shots);
+      for (var i = 0; i < projectileCount; i++)
+      {
+        Shoot(shots, i, projectileCount);
+
+        // Check upgrade
+        var tower2Chance = Shop.GetUpgradeCount(Shop.UpgradeType.TOWER2_PLAYERSHOOT);
+        if (tower2Chance > 0)
+        {
+          _tower2Timer -= tower2Chance * 0.5f;
+        }
+      }
 
       // Reset upgrades
-      if (_upgradeEnabled_arrowRain)
+      if (s_UpgradeEnabled_arrowRain)
       {
         ResetUpgrade(Shop.UpgradeType.ARROW_RAIN_COUNTER);
       }
 
       // Check pen
-      if (_upgradeEnabled_penetratingArrow)
+      if (s_UpgradeEnabled_penetratingArrow)
       {
         ResetUpgrade(Shop.UpgradeType.ARROW_PENETRATION_COUNTER);
       }
@@ -682,6 +969,11 @@ public class PlayerScript : MonoBehaviour
 
     _fingerPos.transform.localPosition = new Vector3(-50f, 0f, -5f);
     _fingerPos2.transform.localPosition = new Vector3(-50f, 0f, -5f);
+
+    _shootReady = false;
+
+    if (_sBowDraw.isPlaying)
+      _sBowDraw.Stop();
   }
 
   public static void UIUpdateAmmoCounter()
@@ -690,7 +982,7 @@ public class PlayerScript : MonoBehaviour
     for (var i = 0; i < 5; i++)
     {
       var ui = GameObject.Find("AmmoArrow" + i).GetComponent<MeshRenderer>();
-      var val = (i < s_Singleton._ammo ? true : false);
+      var val = (!GameScript.StateAtMainMenu() && s_Singleton._health > 0 && i < s_Singleton._ammo ? true : false);
       if (ui.enabled != val)
         ui.enabled = val;
     }
@@ -752,6 +1044,65 @@ public class PlayerScript : MonoBehaviour
     s.Stop();
   }
 
+  IEnumerator Tower2GainHealthCo()
+  {
+
+    var s = GameObject.Find("TowerSmoke2").GetComponent<ParticleSystem>();
+    s.Play();
+    GameScript.PlaySound(_sTowerMove);
+
+    var timer = 1f;
+    while (timer > 0f)
+    {
+      timer -= 0.05f;
+      yield return new WaitForSecondsRealtime(0.05f);
+      var movePos = new Vector3(0f, 0.35f, 0f);
+      _tower2.transform.position += movePos;
+    }
+    yield return new WaitForSecondsRealtime(0.25f);
+
+    _tower2Timer = _UpgradeFunction_tower2Rate.Invoke(Shop.GetUpgradeCount(Shop.UpgradeType.TOWER2));
+    GameResources.s_Instance._SliderTower2UI.value = 0f;
+    GameResources.s_Instance._SliderTower2UI.gameObject.SetActive(true);
+
+    s.Stop();
+  }
+  public static void Tower2GainHealth()
+  {
+    s_Singleton.StartCoroutine(s_Singleton.Tower2GainHealthCo());
+  }
+
+  IEnumerator Tower2LoseHealthCo()
+  {
+
+    var s = GameObject.Find("TowerSmoke2").GetComponent<ParticleSystem>();
+    s.Play();
+    GameScript.PlaySound(_sTowerMove);
+
+    GameResources.s_Instance._SliderTower2UI.gameObject.SetActive(false);
+
+    var timer = 1f;
+    while (timer > 0f)
+    {
+      timer -= 0.05f;
+      yield return new WaitForSecondsRealtime(0.05f);
+      var movePos = new Vector3(0f, 0.35f, 0f);
+      _tower2.transform.position -= movePos;
+    }
+    yield return new WaitForSecondsRealtime(0.25f);
+
+    s.Stop();
+  }
+  public static void Tower2LoseHealth()
+  {
+    s_Singleton.StartCoroutine(s_Singleton.Tower2LoseHealthCo());
+  }
+
+  public static void IncrementTower2Timer(float by)
+  {
+    s_Singleton._tower2Timer -= by;
+  }
+
   public void Hit()
   {
     if (!GameScript.StateAtPlay())
@@ -771,7 +1122,7 @@ public class PlayerScript : MonoBehaviour
     }
   }
 
-  void Shoot(int shootNum = 1)
+  void Shoot(int shootNum, int projectileIndex = 0, int maxProjectileIndex = 1)
   {
     _ammo--;
     (_sShoot).Play();
@@ -796,19 +1147,30 @@ public class PlayerScript : MonoBehaviour
         addPos.y = -20f;
       }
 
+      // Projectile count
+      var startPos = 0;
+      if (maxProjectileIndex == 2)
+      {
+        if (projectileIndex == 0)
+          startPos = 1;
+        else
+          startPos = 2;
+      }
+
       // Shoooooot
-      var ar = Shoot(
-          (InputManager._MouseDownPos - InputManager._MouseUpPos + addPos),
-          _indicator.transform.localScale.x * 160f
+      var arrowScript = Shoot(
+        (InputManager._MouseDownPos - InputManager._MouseUpPos + addPos),
+        _indicator.transform.localScale.x * 160f,
+        startPos
       );
 
       // Pen
-      if (_upgradeEnabled_penetratingArrow)
-        ar.ActivatePierce();
+      if (s_UpgradeEnabled_penetratingArrow)
+        arrowScript.ActivatePierce();
 
       // Check game spawned
       if (i > 0)
-        ar._GameSpawned = true;
+        arrowScript._GameSpawned = true;
       WaveStats._arrowsShot++;
     }
 
@@ -862,7 +1224,7 @@ public class PlayerScript : MonoBehaviour
     s_Singleton.StartCoroutine(ArrowRainCo(x, upgradeModifiers));
   }
 
-  ArrowScript Shoot(Vector2 dir, float force)
+  ArrowScript Shoot(Vector2 dir, float force, int startPos = 0)
   {
     // Check force
     if (force < 800f)
@@ -872,7 +1234,12 @@ public class PlayerScript : MonoBehaviour
 
     // Spawn arrow
     var arrow = SpawnArrow();
-    arrow.transform.position = transform.GetChild(0).position;
+    var startPosition = transform.GetChild(0).position;
+    if (startPos == 1)
+      startPosition.y += 0.4f;
+    else if (startPos == 2)
+      startPosition.y -= 0.4f;
+    arrow.transform.position = startPosition;
 
     // Fire!
     arrow.GetComponent<Rigidbody2D>().bodyType = RigidbodyType2D.Dynamic;
@@ -912,6 +1279,14 @@ public class PlayerScript : MonoBehaviour
     var arrow = Instantiate(_arrow, GameResources.s_Instance._Arrows);
     arrow.name = "Arrow";
 
+    // Check scale
+    var scaleMod = 1f + Shop.GetUpgradeCount(Shop.UpgradeType.PROJECTILE_SIZE) * 0.75f;
+    if (scaleMod != 1f)
+    {
+      arrow.transform.localScale *= scaleMod;
+    }
+
+    //
     return arrow.GetComponent<ArrowScript>();
   }
 
@@ -983,6 +1358,13 @@ public class PlayerScript : MonoBehaviour
       ToggleFire(true);
     }
 
+    // Skills
+    var count = Shop.GetUpgradeCount(Shop.UpgradeType.HEALTH_UPGRADES);
+    if (count > 0)
+    {
+      Shop.IncrementUpgradesByPercent(count * 0.5f);
+    }
+
     // Reset combo
     SetCombo(1f);
   }
@@ -1006,7 +1388,7 @@ public class PlayerScript : MonoBehaviour
     switch (ammo)
     {
       case 3:
-        s_Singleton._ammoTime = 1.3f;
+        s_Singleton._ammoTime = 1.05f;
         break;
         /*case 4:
           s_Singleton._ammoTime = 1.1f;
@@ -1014,61 +1396,6 @@ public class PlayerScript : MonoBehaviour
         case 5:
           s_Singleton._ammoTime = 0.9f;
           break;*/
-    }
-  }
-
-  public static void AddTarget()
-  {
-    s_Singleton._targetNumber++;
-    MenuManager.SetWaveSign($"{s_Singleton._targetNumber + 1}");
-    switch (s_Singleton._targetNumber)
-    {
-      case 2:
-        GameScript.Targets._Difficulty++;
-        break;
-      case 3:
-        GameScript.Targets._Difficulty++;
-
-        // Play music
-        var s = GameScript.s_Instance.GetComponent<AudioSource>();
-        if (!s.isPlaying)
-        {
-          s.Play();
-        }
-        break;
-      case 5:
-        GameScript.Targets._Difficulty++;
-        GameScript.Targets._MinTargets++;
-        break;
-      case 15:
-        GameScript.Targets._Difficulty++;
-        break;
-      case 25:
-        GameScript.Targets._Difficulty++;
-        GameScript.Targets._MinTargets++;
-        break;
-      case 35:
-        GameScript.Targets._Difficulty++;
-        GameScript.Targets._MinTargets++;
-        SetAmmoMax(4);
-        break;
-      case 45:
-        GameScript.Targets._Difficulty++;
-        GameScript.Targets._MinTargets++;
-        SetAmmoMax(5);
-        break;
-      case 60:
-        GameScript.Targets._Difficulty++;
-        GameScript.Targets._MinTargets++;
-        break;
-      case 100:
-        GameScript.Targets._Difficulty++;
-        GameScript.Targets._MinTargets++;
-        break;
-      case 150:
-        GameScript.Targets._Difficulty++;
-        GameScript.Targets._MinTargets++;
-        break;
     }
   }
 

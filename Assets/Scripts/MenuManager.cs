@@ -5,8 +5,8 @@ using UnityEngine;
 public class MenuManager
 {
 
-  public static GameObject _musicButton, s_ShopButton, _pauseButton, _waveSign, _coin, _stats, _upgrades;
-  public static CMenu _mainMenu, _pauseMenu, _winMenu, _shop, _loseMenu, _betweenWaves;
+  public static GameObject s_ShopButton, s_PauseButton, s_StatsButton, _waveSign, _coin, _stats, _upgrades;
+  public static CMenu _mainMenu, s_PauseMenu, _winMenu, s_ShopMenu, s_StatsMenu, _loseMenu, _betweenWaves, _guideMenu, _optionsMenu;
 
   // Use this for initialization
   public static void Init()
@@ -15,12 +15,17 @@ public class MenuManager
 
     _loseMenu = new CMenu("LoseMenu");
 
-    _pauseMenu = new CMenu("PauseMenu");
-    _pauseButton = GameObject.Find("PauseButton");
+    s_PauseMenu = new CMenu("PauseMenu");
+    s_PauseButton = GameObject.Find("PauseButton");
+    s_StatsButton = GameObject.Find("StatsButton");
+
+    _guideMenu = new CMenu("GuideMenu");
+    _optionsMenu = new CMenu("OptionsMenu");
 
     _upgrades = GameObject.Find("Upgrades");
 
-    _shop = new CMenu("Shop");
+    s_ShopMenu = new CMenu("Shop");
+    s_StatsMenu = new CMenu("StatsMenu");
 
     _winMenu = new CMenu("WinMenu");
 
@@ -32,12 +37,13 @@ public class MenuManager
     _coin = GameResources.s_Instance._CameraMain.transform.GetChild(0).GetChild(1).GetChild(0).gameObject;
 
     s_ShopButton = GameObject.Find("ShopButton");
-    _musicButton = GameObject.Find("MusicButton");
 
     _waveSign.SetActive(false);
-    _pauseButton.SetActive(false);
+    s_PauseButton.SetActive(false);
+    s_StatsButton.SetActive(false);
     Wave.ToggleShopUI(false);
-    _musicButton.SetActive(false);
+
+    GameResources.s_Instance._SliderTower2UI.gameObject.SetActive(false);
 
     ToggleGameUI(false);
   }
@@ -84,14 +90,16 @@ public class MenuManager
     public void Hide()
     {
       _Visible = false;
-      GameScript.s_Instance.StartCoroutine(HideCo(this));
+      _menu.transform.localPosition = new Vector3(_menu.transform.localPosition.x, 70f, _menu.transform.localPosition.z); ;
+      //GameScript.s_Instance.StartCoroutine(HideCo(this));
     }
 
     // Show menu wrapper
     public void Show()
     {
       _Visible = true;
-      GameScript.s_Instance.StartCoroutine(ShowCo(this));
+      _menu.transform.localPosition = new Vector3(_menu.transform.localPosition.x, 0f, _menu.transform.localPosition.z); ;
+      //GameScript.s_Instance.StartCoroutine(ShowCo(this));
     }
 
     // Toggle
@@ -126,8 +134,8 @@ public class MenuManager
     }
     static IEnumerator ShowCo(CMenu menu)
     {
-      Vector3 savePos = menu._menu.transform.localPosition;
-      float t = 0f;
+      var savePos = menu._menu.transform.localPosition;
+      var t = 0f;
       while (t <= 1f)
       {
         menu._menu.transform.localPosition = Vector3.Slerp(savePos, new Vector3(savePos.x, YPOS.x, savePos.z), t);
@@ -148,6 +156,10 @@ public class MenuManager
     _coin.transform.parent.gameObject.SetActive(toggle);
     _upgrades.SetActive(toggle);
     GameResources.s_Instance._SliderSloMo.gameObject.SetActive(toggle);
+    GameResources.s_Instance._SliderComboDecrease.gameObject.SetActive(toggle);
+
+    if (!toggle || (toggle && Shop.GetUpgradeCount(Shop.UpgradeType.TOWER2) > 0))
+      GameResources.s_Instance._SliderTower2UI.gameObject.SetActive(toggle);
   }
 
   // Show a menu after a given time
@@ -159,56 +171,6 @@ public class MenuManager
   {
     yield return new WaitForSeconds(time);
     menu.Show();
-  }
-
-  static public void MenuBetweenWaves()
-  {
-    GameScript._state = GameScript.GameState.BETWEEN_MENU;
-
-    ShowMenuAfterTime(MenuManager._betweenWaves, 1.5f);
-
-    MenuManager.ShowStats();
-  }
-
-  // Show the stats menu
-  public static void ShowStats()
-  {
-    int lastCoin = PlayerPrefs.GetInt("TotalCoins", 0);
-    PlayerPrefs.SetInt("TotalCoins", lastCoin + PlayerScript.WaveStats._coinsGained);
-
-    GameScript.s_Instance.StartCoroutine(ShowStatsCo());
-    MenuManager._pauseButton.SetActive(false);
-  }
-  static IEnumerator ShowStatsCo()
-  {
-    TextMesh text = _stats.transform.GetChild(0).GetChild(0).GetComponent<TextMesh>();
-    text.text = "";
-    yield return new WaitForSeconds(2f);
-    // Save game before starting waves so can revert if dies
-    //GameScript.SaveGame();
-
-    // Show coin magic
-    int coinsGot = PlayerScript.WaveStats._coinsGained,
-        coinsHad = PlayerScript.GetCoins() - coinsGot,
-        coinSave = coinsGot;
-    //Debug.Log(string.Format("Coins got: {0} Coins had: {1}", coinsGot, coinsHad));
-    text.text = string.Format("{0} (+{1})", coinsHad, coinsGot);
-    yield return new WaitForSeconds(1.5f);
-    while (coinsGot > 0 && GameScript._state == GameScript.GameState.BETWEEN_MENU)
-    {
-      yield return new WaitForSeconds(0.005f);
-      coinsGot -= 5;
-      coinsHad += 5;
-      text.text = string.Format("{0} (+{1})", coinsHad, coinsGot);
-
-      GameObject newCoin = Object.Instantiate(Resources.Load("Coin") as GameObject);
-      GameScript.PlaySound(newCoin.transform.GetChild(0).gameObject, 0.8f, 1.1f);
-      newCoin.transform.position = new Vector3(-50f, 0f, 0f);
-      newCoin.transform.parent = GameResources.s_Instance._ContainerDead;
-    }
-    coinsHad = PlayerScript.GetCoins();
-    coinsHad = PlayerScript.GetCoins();
-    text.text = string.Format("{0} (+ {1})", coinsHad, coinSave);
   }
 
   static public IEnumerator ShowWinStats()
@@ -242,7 +204,7 @@ public class MenuManager
         _loseMenu.Hide();
         break;
       case GameScript.GameState.PAUSED:
-        _pauseMenu.Hide();
+        s_PauseMenu.Hide();
         Time.timeScale = 2.5f;
         break;
       case GameScript.GameState.WIN:
@@ -252,18 +214,12 @@ public class MenuManager
     _waveSign.SetActive(false);
     GameScript._state = GameScript.GameState.MAIN_MENU;
     _mainMenu.Show();
-    _musicButton.SetActive(false);
     // Stop music
     AudioSource s = GameScript.s_Instance.GetComponent<AudioSource>();
     if (s.isPlaying)
     {
       s.Stop();
     }
-  }
-
-  public static void SetWaveSign(string text)
-  {
-    _waveSign.transform.GetChild(0).GetChild(0).GetComponent<TextMesh>().text = text;
   }
 
   // Handle input other than the player's
@@ -280,9 +236,12 @@ public class MenuManager
 
       Shop.UpdateShopPrices();
 
+      GameScript.s_NumExitsMainMenu = 0;
+
       if (Wave.s_MetaWaveIter == 0)
       {
-        _pauseButton.SetActive(true);
+        s_PauseButton.SetActive(true);
+        s_StatsButton.SetActive(true);
         Wave.ToggleShopUI(false);
 
         // Play music
@@ -300,7 +259,87 @@ public class MenuManager
         Shop.UpdateShopPrices();
         Shop.ToggleShop(true);
       }
+
       ButtonNoise();
+    }
+    else if (hit.collider.name.Equals("ToGuide"))
+    {
+      if (!GameScript.StateAtMainMenu())
+        MenuManager.s_PauseMenu.Hide();
+      else
+        MenuManager._mainMenu.Hide();
+      MenuManager._guideMenu.Show();
+      ButtonNoise();
+    }
+    else if (hit.collider.name.Equals("gBack"))
+    {
+      if (!GameScript.StateAtMainMenu())
+      {
+        MenuManager.s_PauseMenu.Show();
+
+        GameScript.s_NumExits = 0;
+        GameScript.s_NumExitsMainMenu = 0;
+        MenuManager.s_PauseMenu._menu.transform.Find("ToMenu").GetChild(1).GetComponent<TMPro.TextMeshPro>().text = $"Exit";
+      }
+      else
+        MenuManager._mainMenu.Show();
+      MenuManager._guideMenu.Hide();
+      ButtonNoise();
+    }
+    else if (hit.collider.name.Equals("statBack"))
+    {
+      StatsMenuBack();
+    }
+    else if (hit.collider.name.Equals("ToOptions"))
+    {
+      if (!GameScript.StateAtMainMenu())
+        MenuManager.s_PauseMenu.Hide();
+      else
+        MenuManager._mainMenu.Hide();
+      MenuManager._optionsMenu.Show();
+      ButtonNoise();
+    }
+    else if (hit.collider.name.Equals("exitOptions"))
+    {
+      if (!GameScript.StateAtMainMenu())
+      {
+        MenuManager.s_PauseMenu.Show();
+
+        GameScript.s_NumExits = 0;
+        GameScript.s_NumExitsMainMenu = 0;
+        MenuManager.s_PauseMenu._menu.transform.Find("ToMenu").GetChild(1).GetComponent<TMPro.TextMeshPro>().text = $"Exit";
+      }
+      else
+        MenuManager._mainMenu.Show();
+      MenuManager._optionsMenu.Hide();
+      ButtonNoise();
+    }
+    else if (hit.collider.name.Equals("oMusicDown"))
+    {
+      var volume = GameScript.s_MusicVolume;
+      if (volume == 0)
+        return;
+
+      volume--;
+
+      GameScript.s_MusicVolume = volume;
+      PlayerPrefs.SetInt("MusicVolume", GameScript.s_MusicVolume);
+      UpdateMusicFX();
+    }
+    else if (hit.collider.name.Equals("oMusicUp"))
+    {
+      var volume = GameScript.s_MusicVolume;
+      if (volume == 5)
+        return;
+
+      volume++;
+
+      var inputGroup = GameObject.Find("VolumeGroup").transform;
+      inputGroup.Find("Value").GetComponent<TMPro.TextMeshPro>().text = $"{volume}/5";
+
+      GameScript.s_MusicVolume = volume;
+      PlayerPrefs.SetInt("MusicVolume", GameScript.s_MusicVolume);
+      UpdateMusicFX();
     }
     else if (hit.collider.name.Equals("ToShop"))
     {
@@ -311,21 +350,7 @@ public class MenuManager
     }
     else if (hit.collider.name.Equals("ToWave"))
     {
-      //Shop.Save();
-      ButtonNoise();
-
-      _pauseButton.SetActive(true);
-      _shop.Hide();
-      if (Wave.ShopVisible())
-      {
-        Wave.ToggleShopUI(true);
-      }
-
-      _shop.Hide();
-      Time.timeScale = GameScript.s_TimeSped ? 2.5f : 1f;
-      GameScript._state = GameScript.GameState.PLAY;
-
-      //StartGame();
+      Shop.ToWave();
     }
     else if (hit.collider.name.Equals("RerollButton"))
     {
@@ -336,33 +361,34 @@ public class MenuManager
         GameScript.s_NumRerolls++;
         Shop.SoundPurchase();
         PlayerScript.SetCoins(playerMoney - rerollCost);
-        Shop.UpdateShopPrices();
+        Shop.UpdateShopPrices(true);
         Shop.UpdateShopPriceStatuses();
       }
     }
     else if (hit.collider.name.Equals("ToMenu"))
     {
+      // Check confirm
+      if (hit.transform.parent.name == "PauseMenu")
+      {
+        if (GameScript.s_NumExits == 3) { }
+        else
+        {
+          GameScript.s_NumExits++;
+          hit.transform.GetChild(1).GetComponent<TMPro.TextMeshPro>().text = $"Exit? {GameScript.s_NumExits + 1}/3";
+          ButtonNoise();
+          return;
+        }
+      }
+
       Wave.DestroyAll();
       ExitToMenu();
       ToggleGameUI(false);
+      PlayerScript.UIUpdateAmmoCounter();
       ButtonNoise();
     }
     else if (hit.collider.name.Equals("Resume"))
     {
-      Time.timeScale = GameScript.s_TimeSped ? 2.5f : 1f;
-      _pauseMenu.Hide();
-      _pauseButton.SetActive(true);
-      if (Wave.ShopVisible())
-        Wave.ToggleShopUI(true);
-      MenuManager._musicButton.SetActive(false);
-      GameScript._state = GameScript.GameState.PLAY;
-      ButtonNoise();
-    }
-    else if (hit.collider.name.Equals("MusicButton"))
-    {
-      GameScript.s_musicPlaying = !GameScript.s_musicPlaying;
-      UpdateMusicFX();
-      ButtonNoise();
+      Resume();
     }
     else if (hit.collider.name.Equals("ModeWave"))
     {
@@ -370,10 +396,32 @@ public class MenuManager
       ButtonNoise();
     }
 
+    else if (hit.collider.name.Equals("ToExitGame"))
+    {
+      if (GameScript.s_NumExitsMainMenu == 3) { }
+      else
+      {
+        GameScript.s_NumExitsMainMenu++;
+        hit.transform.GetChild(1).GetComponent<TMPro.TextMeshPro>().text = $"Exit? {GameScript.s_NumExits + 1}/3";
+        ButtonNoise();
+        return;
+      }
+
+#if !UNITY_EDITOR
+      Application.Quit();
+#endif
+    }
+
     // Check shop
     else if (hit.transform.parent.name == "Shop")
     {
       Shop.ShopInput(hit.collider.name);
+    }
+
+    // Check guide
+    else if (hit.transform.parent.name == "gSelections")
+    {
+      GameScript.Guide.SetGuideText(hit.transform.name);
     }
   }
 
@@ -394,7 +442,8 @@ public class MenuManager
     Wave.LoadWaves(Wave.s_MetaWaveIter);
     Wave.StartWaves();
     GameScript._state = GameScript.GameState.PLAY;
-    _pauseButton.SetActive(true);
+    s_PauseButton.SetActive(true);
+    s_StatsButton.SetActive(true);
 
     // Play music
     var s = GameScript.s_Instance.GetComponent<AudioSource>();
@@ -404,6 +453,25 @@ public class MenuManager
     }
   }
 
+  public static void StatsMenuBack()
+  {
+    Resume();
+    MenuManager.s_StatsMenu.Hide();
+    ButtonNoise();
+  }
+
+  public static void Resume()
+  {
+    Time.timeScale = GameScript.s_TimeSped ? 2.5f : 1f;
+    s_PauseMenu.Hide();
+    s_PauseButton.SetActive(true);
+    s_StatsButton.SetActive(true);
+    if (Wave.ShopVisible())
+      Wave.ToggleShopUI(true);
+    GameScript._state = GameScript.GameState.PLAY;
+    ButtonNoise();
+  }
+
   static void ButtonNoise()
   {
     PlayerScript.ButtonNoise();
@@ -411,20 +479,31 @@ public class MenuManager
 
   public static void UpdateMusicFX()
   {
-    var s = GameScript.s_Instance.GetComponent<AudioSource>();
-    if (GameScript.s_musicPlaying)
+    var volume = GameScript.s_MusicVolume;
+    var musicSource = GameScript.s_Instance.GetComponent<AudioSource>();
+
+    musicSource.volume = GameScript.s_MusicVolumeSave * (volume / 5f);
+
+    // Buttons
+    var inputGroup = GameObject.Find("VolumeGroup").transform;
+    inputGroup.Find("Value").GetComponent<TMPro.TextMeshPro>().text = $"{volume}/5";
+
+    var buttonDown = inputGroup.Find("oMusicDown");
+    var buttonUp = inputGroup.Find("oMusicUp");
+
+    var colorDown = GameScript.Guide.s_buttonSaveColor;
+    var colorUp = GameScript.Guide.s_buttonSaveColor;
+    if (volume == 0)
     {
-      s.volume = 0.4f;
-      _musicButton.GetComponent<MeshRenderer>().material.color = GameObject.Find("Stone").GetComponent<MeshRenderer>().material.color;
+      colorDown = Color.gray;
     }
-    else
+    else if (volume == 5)
     {
-      s.volume = 0f;
-      _musicButton.GetComponent<MeshRenderer>().material.color = Color.black;
+      colorUp = Color.gray;
     }
 
-    // Save
-    PlayerPrefs.SetInt("Music", GameScript.s_musicPlaying ? 1 : 0);
+    buttonDown.GetChild(0).GetComponent<MeshRenderer>().material.color = colorDown;
+    buttonUp.GetChild(0).GetComponent<MeshRenderer>().material.color = colorUp;
   }
 
 }

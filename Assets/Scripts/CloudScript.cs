@@ -14,10 +14,10 @@ public class CloudScript : MonoBehaviour {
             _children[i] = transform.GetChild(i).gameObject;
         }
 	}
-	
+
 	// Update is called once per frame
 	void Update () {
-        transform.position += new Vector3(-1f, 0f, 0f) * Time.deltaTime * 1.25f;
+        transform.position += new Vector3(-1f, 0f, 0f) * Time.deltaTime * 0.6f;
 
         if(transform.position.x < -50f)
         {

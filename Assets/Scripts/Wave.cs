@@ -23,16 +23,17 @@ public class Wave
   float _waveTimer;
   bool _setNextWave;
 
+  static float s_nextSlide;
+
   void Start()
   {
     IEnumerator setActive()
     {
-      var lastSlide = 0f;
       foreach (var e in _enemies)
       {
-        if (e._IsSlide)
-          Debug.Log($"Spawning slide [{e._EnemyType}]");
-        while (e._IsSlide && Time.time - lastSlide < 0f)
+        //if (e._IsSlide)
+        //  Debug.Log($"Spawning slide [{e._EnemyType} ({Time.time - s_nextSlide})]");
+        while (e._IsSlide && Time.time - s_nextSlide < 0f)
         {
           yield return new WaitForSeconds(0.25f);
         }
@@ -43,22 +44,23 @@ public class Wave
 
         if (e._IsSlide)
         {
-          Debug.Log($"Spawned slide [{e._EnemyType}]: {Time.time}");
-          var slideWait = 7.5f;
+          //Debug.Log($"Spawned slide [{e._EnemyType}]: {Time.time} ... {s_nextSlide} = {Time.time - s_nextSlide}");
+          var slideWait = 6.5f;
           switch (e._EnemyType)
           {
             case EnemyScript.EnemyType.GROUND_SLIDE_MEDIUM:
-              slideWait = 19f;
+              slideWait = 10f;
               break;
 
             case EnemyScript.EnemyType.GROUND_SLIDE:
             case EnemyScript.EnemyType.GROUND_SLIDE_TOP:
-              slideWait = 15f;
+              slideWait = 11f;
               break;
           }
-          lastSlide = Time.time + slideWait;
+          s_nextSlide = Time.time + slideWait;
         }
-        yield return new WaitForSeconds(0.1f);
+
+        yield return new WaitForSeconds(0.25f);
       }
     }
     GameScript.s_Instance.StartCoroutine(setActive());
@@ -117,7 +119,7 @@ public class Wave
       e.gameObject.SetActive(false);
 
       // Random chance to add crate
-      if (Mathf.RoundToInt(Random.value * 15f) == 0f)
+      if (Mathf.RoundToInt(Random.value * 12.5f) == 0f)
       {
         e = EnemyScript.SpawnEnemy(EnemyScript.EnemyType.CRATE);
         wave._enemies.Add(e);
@@ -232,12 +234,11 @@ public class Wave
     // Shop timer
     if (s_shopVisible)
     {
-      var maxTime = 35f;
-      GameResources.s_Instance._SliderShop.value = (Time.time - s_timeShopVisible) / 15f;
+      var maxTime = 30f;
+      GameResources.s_Instance._SliderShop.value = 1f - ((Time.time - s_timeShopVisible) / maxTime);
       if (Time.time - s_timeShopVisible > maxTime)
       {
-        s_shopVisible = false;
-        ToggleShopUI(false);
+        HideShop();
       }
     }
   }
@@ -270,9 +271,8 @@ public class Wave
   IEnumerator MoveWaveSign()
   {
     var sign = MenuManager._waveSign;
-    sign.transform.localPosition = new Vector3(0f, 30.5f, 10f);
-    sign.transform.GetChild(0).GetChild(0).GetComponent<TextMesh>().text =
-        "" + (Wave.s_MetaWaveIter);
+    sign.transform.localPosition = new Vector3(sign.transform.localPosition.x, 30.5f, sign.transform.localPosition.z);
+    sign.transform.GetChild(0).GetChild(0).GetComponent<TMPro.TextMeshPro>().text = $"{Wave.s_MetaWaveIter + 1}";
     sign.SetActive(true);
     GameScript.PlaySound(GameObject.Find("WaveBegin"));
     yield return new WaitForSecondsRealtime(1.5f);
@@ -282,8 +282,8 @@ public class Wave
       t += 0.05f;
       yield return new WaitForSecondsRealtime(0.01f);
       sign.transform.localPosition = Vector3.Slerp(
-          new Vector3(0f, 30.5f, 10f),
-          new Vector3(0f, 33.52f, 10f),
+          new Vector3(sign.transform.localPosition.x, 30.5f, sign.transform.localPosition.z),
+          new Vector3(sign.transform.localPosition.x, 33.52f, sign.transform.localPosition.z),
           t
       );
     }
@@ -297,11 +297,18 @@ public class Wave
         arrows = GameObject.Find("Arrows").transform;
 
     for (var i = dead.childCount - 1; i >= 0; i--)
+    {
       Object.Destroy(dead.GetChild(i).gameObject);
+    }
     for (var i = alive.childCount - 1; i >= 0; i--)
+    {
       Object.Destroy(alive.GetChild(i).gameObject);
+    }
+    EnemyScript.s_Sensors = new Dictionary<int, (EnemyScript, MeshRenderer)>();
     for (var i = arrows.childCount - 1; i >= 0; i--)
+    {
       Object.Destroy(arrows.GetChild(i).gameObject);
+    }
   }
 
   // Random load waves
@@ -392,10 +399,11 @@ public class Wave
         {
           waitTime = 0f;
         }
+
         // If last spawn in subwave, either wait for all dead or wait a period between waves
         else if (lastSpawn)
         {
-          if (Random.Range(0, 6) == 0 && Wave.s_MetaWaveIter > 2)
+          if (Random.Range(0, 11) == 0 && Wave.s_MetaWaveIter > 2)
             waitTime = 0f;
           else
             waitTime = 15f;
@@ -426,8 +434,7 @@ public class Wave
 
         //var waveNumberModified = waveNumber - 16 + 1;
 
-        var wavePoints =
-            80 + (int)(waveNumber * (40f * Mathf.Clamp(waveNumber * 0.07f, 0f, 10000)));
+        var wavePoints = 85 + (int)(waveNumber * (15f * Mathf.Clamp((waveNumber + 6) * 0.06f, 0f, 10000)));
         var wavePointsRandom = (int)Random.Range(5, 10 + waveNumber * 1.5f);
 
         var subwaveCount = (int)Random.Range(1, 3 + waveNumber * 0.08f);
@@ -440,17 +447,18 @@ public class Wave
 
         var enemyPoolDef = new Dictionary<EnemyScript.EnemyType, (int, int, float)>()
         {
-          { EnemyScript.EnemyType.GROUND_ROLL, (5, 0, 1f) },
-          { EnemyScript.EnemyType.GROUND_ROLL_SMALL, (8, 0, 0.5f) },
-          { EnemyScript.EnemyType.GROUND_POP, (10, 6, 1f) },
-          { EnemyScript.EnemyType.GROUND_POP_FLOAT, (13, 12, 1f) },
-          { EnemyScript.EnemyType.GROUND_ROLL_ARMOR_2, (15, 4, 0.95f) },
-          { EnemyScript.EnemyType.GROUND_ROLL_ARMOR_4, (23, 10, 0.95f) },
-          { EnemyScript.EnemyType.GROUND_ROLL_ARMOR_8, (30, 12, 0.95f) },
-          { EnemyScript.EnemyType.GROUND_SLIDE_SMALL, (18, 2, 0.85f) },
-          { EnemyScript.EnemyType.GROUND_SLIDE_MEDIUM, (25, 8, 0.85f) },
-          { EnemyScript.EnemyType.GROUND_SLIDE, (35, 14, 0.85f) },
-          { EnemyScript.EnemyType.GROUND_SLIDE_TOP, (30, 16, 0.85f) },
+          { EnemyScript.EnemyType.GROUND_ROLL, (8, 0, 0.9f) },
+          { EnemyScript.EnemyType.GROUND_ROLL_SMALL, (12, 1, 0.35f) },
+          { EnemyScript.EnemyType.GROUND_POP, (15, 4, 0.65f) },
+          { EnemyScript.EnemyType.GROUND_POP_FLOAT, (18, 12, 0.65f) },
+          { EnemyScript.EnemyType.GROUND_ROLL_ARMOR_2, (15, 6, 0.75f) },
+          { EnemyScript.EnemyType.GROUND_ROLL_ARMOR_4, (23, 10, 0.55f) },
+          { EnemyScript.EnemyType.GROUND_ROLL_ARMOR_8, (30, 14, 0.55f) },
+          { EnemyScript.EnemyType.GROUND_ROLL_STONE_1, (35, 18, 0.5f) },
+          { EnemyScript.EnemyType.GROUND_SLIDE_SMALL, (19, 2, 0.45f) },
+          { EnemyScript.EnemyType.GROUND_SLIDE_MEDIUM, (24, 8, 0.45f) },
+          { EnemyScript.EnemyType.GROUND_SLIDE, (33, 16, 0.45f) },
+          { EnemyScript.EnemyType.GROUND_SLIDE_TOP, (29, 20, 0.45f) },
         };
 
         // Create enemy pool for wave selection based on wave progression

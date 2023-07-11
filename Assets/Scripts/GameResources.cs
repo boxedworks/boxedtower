@@ -10,15 +10,15 @@ public class GameResources
   public Transform _Sun,
       _Sky,
       _SpawnLine,
-      _ContainerDead,
+      _ContainerDead, _ContainerAlive,
       _Arrows,
       _UI;
 
-  public TextMesh _TextCoins;
-  public UnityEngine.UI.Slider _SliderSloMo, _SliderShop;
+  public UnityEngine.UI.Slider _SliderSloMo, _SliderShop, _SliderComboDecrease, _SliderTower2UI;
 
   public ParticleSystem _ParticlesCoins,
-      _ParticlesArrowHit;
+      _ParticlesArrowHit,
+      _Lightning;
 
   public AudioSource _AudioCoinDrop,
       _AudioSfxGround,
@@ -30,6 +30,8 @@ public class GameResources
       _AudioSfxCrateBreak;
 
   public Collider2D _ColliderGround;
+
+  public TMPro.TextMeshPro _TextStats, _TextCoins;
 
   // Constructor
   public static GameResources s_Instance;
@@ -45,14 +47,21 @@ public class GameResources
     _Sky = GameObject.Find("Sky").transform;
     _SpawnLine = GameObject.Find("SpawnLine").transform;
     _ContainerDead = GameObject.Find("Dead").transform;
+    _ContainerAlive = GameObject.Find("Alive").transform;
     _Arrows = GameObject.Find("Arrows").transform;
     _UI = GameObject.Find("UI").transform;
 
+    _TextStats = GameObject.Find("statDesc").GetComponent<TMPro.TextMeshPro>();
+    _TextCoins = GameObject.Find("CoinUI").transform.GetChild(1).GetComponent<TMPro.TextMeshPro>();
+
     _ParticlesCoins = GameObject.Find("CoinSystem").GetComponent<ParticleSystem>();
     _ParticlesArrowHit = GameObject.Find("ArrowHit").GetComponent<ParticleSystem>();
+    _Lightning = GameObject.Find("Lightning").GetComponent<ParticleSystem>();
 
     _SliderSloMo = GameObject.Find("SlowMoUI").transform.GetChild(0).GetComponent<UnityEngine.UI.Slider>();
     _SliderShop = GameObject.Find("ShopTimerUI").transform.GetChild(0).GetComponent<UnityEngine.UI.Slider>();
+    _SliderComboDecrease = GameObject.Find("ComboDecreaseTimerUI").transform.GetChild(0).GetComponent<UnityEngine.UI.Slider>();
+    _SliderTower2UI = GameObject.Find("Tower2UI").transform.GetChild(0).GetComponent<UnityEngine.UI.Slider>();
 
     _AudioCoinDrop = GameObject.Find("CoinDrop").GetComponent<AudioSource>();
 
@@ -86,7 +95,5 @@ public class GameResources
         .GetComponent<AudioSource>();
 
     _ColliderGround = GameObject.Find("Ground").GetComponent<Collider2D>();
-
-    _TextCoins = GameObject.Find("CoinUI").transform.GetChild(1).GetComponent<TextMesh>();
   }
 }
